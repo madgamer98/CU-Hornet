@@ -1,0 +1,20 @@
+# build outputs
+bin/
+obj/
+*.user
+.vs/
+.idea/
+
+# local game paths / secrets
+LocalProps.props
+*.local.props
+
+# decompiled game code and extracted assets must never be committed
+_decomp/
+decomp/
+extracted/
+assets_src/
+
+# releases / packages
+dist/
+*.zip
