@@ -10,6 +10,7 @@ namespace HornetInCasualties
     public class HornetAvatar : MonoBehaviour
     {
         private Body _body;
+        private Transform _sprite;
         private SpriteRenderer _renderer;
 
         public static HornetAvatar Ensure(Body body)
@@ -19,15 +20,14 @@ namespace HornetInCasualties
                 return null;
             }
 
+            // The avatar component lives on the Body itself, so it dies with the player.
             HornetAvatar existing = body.GetComponent<HornetAvatar>();
             if (existing != null)
             {
                 return existing;
             }
 
-            var go = new GameObject("HornetAvatar");
-            go.transform.SetParent(body.transform, false);
-            var avatar = go.AddComponent<HornetAvatar>();
+            HornetAvatar avatar = body.gameObject.AddComponent<HornetAvatar>();
             avatar.Init(body);
             Plugin.Log.LogInfo("HornetAvatar attached to the player.");
             return avatar;
@@ -36,24 +36,27 @@ namespace HornetInCasualties
         private void Init(Body body)
         {
             _body = body;
-            _renderer = gameObject.AddComponent<SpriteRenderer>();
+
+            var go = new GameObject("HornetSprite");
+            go.transform.SetParent(body.transform, false);
+            _sprite = go.transform;
+
+            _renderer = go.AddComponent<SpriteRenderer>();
             _renderer.sprite = PlaceholderSprite.Create();
             _renderer.sortingOrder = 5000;
         }
 
         private void LateUpdate()
         {
-            if (_body == null)
+            if (_body == null || _sprite == null)
             {
-                Destroy(gameObject);
                 return;
             }
 
             Transform anchor = _body.baseLimb != null ? _body.baseLimb.transform : _body.transform;
             Vector3 p = anchor.position;
-            transform.position = new Vector3(p.x, p.y, p.z - 0.02f);
-            transform.rotation = Quaternion.identity;
-
+            _sprite.position = new Vector3(p.x, p.y, p.z - 0.02f);
+            _sprite.rotation = Quaternion.identity;
             _renderer.flipX = !_body.isRight;
             _renderer.enabled = Plugin.Enable.Value;
         }

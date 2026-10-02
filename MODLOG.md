@@ -100,3 +100,29 @@ CU's player controller.
 - `src/HornetAvatar.cs` — attaches to the `Body`'s GameObject, follows `Body.baseLimb`, flips with
   `Body.isRight`. Stage 1 uses a generated placeholder sprite (`PlaceholderSprite`).
 - **Build:** `dotnet build -c Debug` (deploys automatically).
+
+## Verification (Stage 1 — DONE 2026-10-02)
+- Plugin loads: `BepInEx\LogOutput.log` → `[Info :Hornet in Casualties] Hornet in Casualties v0.0.1 loaded.`
+- Avatar attaches once per player: `[Info :Hornet in Casualties] HornetAvatar attached to the player.`
+- **Seen in the real demo:** placeholder Hornet is drawn on the player in the lifepod and in the training
+  sandbox (screenshot `shots/world1_zoom2.png`, `shots/sandbox2.png`). The Harmony hook on
+  `PlayerCamera.Update` works.
+- **Fixed:** component was added to a child but searched on the body, so it respawned every frame. Component
+  now lives on the `Body` GameObject itself; sprite is a child.
+
+## Test oracle (dev)
+- **F9** (from the main menu): `PreRunScript.instance.StartTutorial()` → loads the tutorial world.
+- **F8** (in the tutorial world): `TutorialHandler.main.StartCourse(typeof(SandboxCourse))` and hides the
+  course-select overlay → the flat **sandbox** test area.
+- **F10** (from the main menu): `PreRunScript.instance.StartRun()` → normal run.
+- Keyboard: F8/F9/F10 (VK 0x77/0x78/0x79). The game's own binds (Settings.cs) don't use them.
+- **Waits:** start small (~6 s) and only increase if a load is actually slow. Don't hard-code 30 s.
+- Menu click map (client px, 1920x1080): content warning → Ctrl; main-menu start = the sitting creature's
+  **eyeball** ~ (620, 530); Run settings **Start** ~ (660, 1040). In the course-select screen, right arrow
+  ~ (1496, 640), **Start** ~ (960, 874).
+- **Launch note:** if launched by exe, prefer `um win launch`.
+
+## Next
+- **Extract Hornet's art + animations from the user's Silksong install** (the current critical path).
+  Then replace the placeholder with real frames and add animation state.
+- Then Hornet's moveset (Stage 2).
