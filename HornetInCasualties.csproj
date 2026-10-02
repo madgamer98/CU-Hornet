@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Matches Unity 2022.3's .NET Standard 2.1 API level (the game DLLs target 2.1). -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HornetInCasualties</AssemblyName>
+    <RootNamespace>HornetInCasualties</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Version>0.0.1</Version>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <DebugType>portable</DebugType>
+    <!-- Unity/Assembly-CSharp can duplicate some framework attributes; quiet the noise. -->
+    <NoWarn>$(NoWarn);CS0436;CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- BepInEx 5 core (from the game's own install; never copied). -->
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCore)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Casualties: Unknown game + Unity modules (from the game's own install). -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Facade: assembles the Unity modules; Assembly-CSharp binds through this. -->
+    <Reference Include="UnityEngine">
+      <HintPath>$(ManagedDir)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(ManagedDir)\UnityEngine.AnimationModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>$(ManagedDir)\UnityEngine.Physics2DModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(ManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(ManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Copy the built plugin (and its runtime data folder) into the game's BepInEx/plugins. -->
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' == 'true'">
+    <MakeDir Directories="$(DataDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(DataDir)" />
+    <Message Importance="high" Text="Deployed $(TargetFileName) -> $(DataDir)" />
+  </Target>
+
+</Project>

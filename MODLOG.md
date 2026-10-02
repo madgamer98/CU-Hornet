@@ -58,11 +58,45 @@ CU's player controller.
 ## Log / next steps
 - [x] Recon: identify engines, loaders, paths, modding scene.
 - [x] Create project dir + this journal.
-- [ ] Decompile CU `Assembly-CSharp.dll`; find the player controller, input, sprite/animation + body/species
-      system, and any console command registration.
-- [ ] Decompile Silksong `Assembly-CSharp.dll`; find `HeroController`, `tk2dSpriteAnimator`, `tK2DSprite`
-      collection names, and where Hornet's animation clips/atlases live.
-- [ ] Set up the BepInEx plugin csproj against CU's Managed assemblies.
+- [x] Decompile CU + Silksong `Assembly-CSharp.dll` (ilspycmd) to `%DECOMP_DIR%\{cu,silksong}`.
+- [x] Set up the BepInEx plugin csproj; builds + auto-deploys to the game.
 - [ ] Vertical slice: show a Hornet sprite on the CU player (idle), then one animation.
 - [ ] Widen: movement set, then moveset.
 - [ ] Verify in the demo + record.
+
+## CU source-of-truth notes (read from decomp)
+- `Body` (`Body.cs`, ~3200 lines) is the player. It is a **2D physics ragdoll**: `Limb[] limbs`
+  (`Rigidbody2D` + `HingeJoint2D` + `SpriteRenderer` per limb), plus IK (`IKHandle`, `IKSegment`) and
+  `Animator bodyAnimator` / `AnimationClip idleClip` / `Animator armsAnimator`.
+  - `Body.baseLimb` is the torso/head (LimbNum: Head=0, UpTorso=1, DownTorso=2, ArmF=3, ArmB=6, LegF=9, LegB=12).
+  - Facing flag: **`Body.isRight`** (bool). Movement: `Body.moveDir` (Vector2), `Body.rb.velocity`,
+    `Body.grounded`, `Body.standing`, `Body.crouching`, `Body.currentClimbable`, `Body.jumpSpeed`,
+    `Body.actualMoveForce`, `Body.actualJumpSpeed`.
+  - Input lives in **`PlayerCamera.Update()`** (line 1485, private): reads `KeyBinds.GetBind("left"/"right"/
+    "up"/"down"/"jump"/"attack"/"throw"/"ragdoll"/"altview"/...)` and writes `body.moveDir`, `body.crouching`.
+  - `PlayerCamera.main` is the singleton; `PlayerCamera.main.body` gives the `Body`.
+  - **Hook used:** Harmony postfix on `PlayerCamera.Update` attaches/finds `HornetAvatar`.
+- `Limb.Awake()` disables `animLimb`'s SpriteRenderer (line 462); limb visuals come from species mods
+  (`CustomBodySprites`). There is a whole custom-species ecosystem (`CUCoreLib`, `CustomSpecies`, `SkinDeep`,
+  `Tailor`). We deliberately don't fight it: we overlay Hornet on the ragdoll.
+- Custom content/console: `ConsoleScript.cs` handles an in-game console (keybind `console`), custom binds,
+  and no-clip (`PlayerCamera.main.body.moveDir`). Good oracle for scripted verification.
+
+## Silksong source-of-truth notes
+- Unity **6000.0.50f1**, Mono. Content is in **Addressables**: `Hollow Knight Silksong_Data\StreamingAssets\aa\`
+  (`.bundle` files) + `resources.assets` (14.3 MB).
+- Player class: `HeroController` (`HeroController.cs`), with `ConfigGroup` (NormalSlash, DashStab,
+  ChargeSlash, WallSlash, Downspike...). Animations play via `Animator.Play(...)` and tk2d
+  (`TeamCherry.TK2D.dll`). Hornet's real move names/timings to be mined next.
+- Extraction: **UnityPy 1.25.3 installed** (Python). Plan: an importer that reads the user's Silksong
+  bundles and emits Hornet atlas PNG + animation JSON into `BepInEx/plugins/HornetInCasualties/`.
+  No Silksong files redistributed.
+
+## Plugin (Stage 1)
+- `HornetInCasualties.csproj` — `netstandard2.1`, refs CU `Managed\*.dll` + BepInEx core; auto-copies the
+  DLL into `BepInEx\plugins\HornetInCasualties\`.
+- `src/Plugin.cs` — BepInEx 5 plugin `dev.cuhornet.hornetincasualties`; Harmony postfix on
+  `PlayerCamera.Update`; config `Enable`, `HideVanillaBody`.
+- `src/HornetAvatar.cs` — attaches to the `Body`'s GameObject, follows `Body.baseLimb`, flips with
+  `Body.isRight`. Stage 1 uses a generated placeholder sprite (`PlaceholderSprite`).
+- **Build:** `dotnet build -c Debug` (deploys automatically).

@@ -1,0 +1,19 @@
+<Project>
+
+  <!-- Machine-specific overrides (gitignored). Optional: the defaults below already
+       point at the installed Casualties: Unknown Demo. -->
+  <Import Project="LocalProps.props" Condition="Exists('LocalProps.props')" />
+
+  <PropertyGroup>
+    <CuGameDir Condition="'$(CuGameDir)' == ''">%CU_GAME_DIR%</CuGameDir>
+    <ManagedDir Condition="'$(ManagedDir)' == ''">$(CuGameDir)\CasualtiesUnknown_Data\Managed</ManagedDir>
+    <BepInExCore Condition="'$(BepInExCore)' == ''">$(CuGameDir)\BepInEx\core</BepInExCore>
+    <BepInExPlugins Condition="'$(BepInExPlugins)' == ''">$(CuGameDir)\BepInEx\plugins</BepInExPlugins>
+    <!-- Where the plugin's runtime data (extracted Hornet atlas + clips) is installed. -->
+    <DataDir Condition="'$(DataDir)' == ''">$(BepInExPlugins)\HornetInCasualties</DataDir>
+    <!-- Silksong install, read at runtime/by the importer. Never copied into the mod. -->
+    <SilksongDir Condition="'$(SilksongDir)' == ''">%SILKSONG_DIR%</SilksongDir>
+    <DeployToGame Condition="'$(DeployToGame)' == ''">true</DeployToGame>
+  </PropertyGroup>
+
+</Project>
