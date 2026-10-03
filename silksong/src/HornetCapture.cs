@@ -1,18 +1,16 @@
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
 namespace HornetExporter
 {
     /// <summary>
-    /// Renders Hornet to a RenderTexture with a dedicated camera that only sees her layer,
-    /// then reads it back. Used both for a one-time frame dump and, later, for the live link.
+    /// Captures Hornet using the game's own main camera (URP-friendly): renders one frame
+    /// with Hornet visible and one with her renderers hidden, then uses the difference as
+    /// alpha. That isolates Hornet from the scenery without fighting URP's camera setup.
     /// </summary>
     internal static class HornetCapture
     {
-        private static Camera _camera;
-        private static RenderTexture _rt;
-        private const int Size = 256;
-
         public static void CaptureToFile()
         {
             HeroController hero = HeroController.instance;
@@ -22,77 +20,114 @@ namespace HornetExporter
                 return;
             }
 
-            RenderTexture rt = Render(hero.gameObject);
-            if (rt == null)
+            Camera cam = GameCameras.instance != null && GameCameras.instance.mainCamera != null
+                ? GameCameras.instance.mainCamera
+                : Camera.main;
+            if (cam == null)
             {
-                Plugin.Log.LogInfo("F8: render failed.");
+                Plugin.Log.LogInfo("F8: no main camera.");
                 return;
             }
 
-            RenderTexture prev = RenderTexture.active;
-            RenderTexture.active = rt;
-            var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
-            tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            int w = Mathf.Min(Screen.width, 1920);
+            int h = Mathf.Min(Screen.height, 1080);
+            RenderTexture rt = RenderTexture.GetTemporary(w, h, 24);
+            RenderTexture prev = cam.targetTexture;
+
+            Color32[] withHero = RenderRead(cam, rt, w, h);
+            List<Renderer> renderers = VisibleRenderers(hero);
+            var wasEnabled = new List<bool>();
+            foreach (Renderer r in renderers)
+            {
+                wasEnabled.Add(r.enabled);
+                r.enabled = false;
+            }
+            Color32[] without = RenderRead(cam, rt, w, h);
+            for (int i = 0; i < renderers.Count; i++)
+            {
+                renderers[i].enabled = wasEnabled[i];
+            }
+
+            cam.targetTexture = prev;
+            RenderTexture.ReleaseTemporary(rt);
+
+            // Diff -> Hornet-only RGBA, then crop to the changed region.
+            var img = new Color32[w * h];
+            int minX = w, minY = h, maxX = -1, maxY = -1;
+            for (int i = 0; i < img.Length; i++)
+            {
+                Color32 a = withHero[i];
+                Color32 b = without[i];
+                int d = Mathf.Max(Mathf.Abs(a.r - b.r), Mathf.Max(Mathf.Abs(a.g - b.g), Mathf.Abs(a.b - b.b)));
+                if (d > 8)
+                {
+                    img[i] = new Color32(a.r, a.g, a.b, (byte)Mathf.Min(255, d * 2));
+                    int x = i % w;
+                    int y = i / w;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (maxX < 0)
+            {
+                Plugin.Log.LogInfo("F8: Hornet diff found no pixels (renderers not captured).");
+                return;
+            }
+
+            int cw = maxX - minX + 1;
+            int ch = maxY - minY + 1;
+            var cropped = new Color32[cw * ch];
+            for (int y = 0; y < ch; y++)
+            {
+                for (int x = 0; x < cw; x++)
+                {
+                    cropped[y * cw + x] = img[(minY + y) * w + (minX + x)];
+                }
+            }
+
+            var tex = new Texture2D(cw, ch, TextureFormat.RGBA32, false);
+            tex.SetPixels32(cropped);
             tex.Apply();
-            RenderTexture.active = prev;
 
             byte[] png = tex.EncodeToPNG();
-            string path = Path.Combine(BepInEx.Paths.PluginPath, "HornetExporter", "hornet_capture.png");
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            string dir = Path.Combine(BepInEx.Paths.PluginPath, "HornetExporter");
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, "hornet_capture.png");
             File.WriteAllBytes(path, png);
-            Plugin.Log.LogInfo("F8: wrote " + path + " (" + tex.width + "x" + tex.height + ")");
+
+            // Hornet's feet are the bottom of the crop; pivotX from world->crop mapping.
+            Plugin.Log.LogInfo("F8: wrote " + path + " crop " + cw + "x" + ch +
+                               " screenRect=(" + minX + "," + minY + ") screen=" + w + "x" + h);
         }
 
-        public static RenderTexture Render(GameObject hero)
+        private static Color32[] RenderRead(Camera cam, RenderTexture rt, int w, int h)
         {
-            EnsureCamera();
-            if (_camera == null)
-            {
-                return null;
-            }
-
-            // Put Hornet on a dedicated layer so only she is captured.
-            int layer = LayerMask.NameToLayer("HornetCapture");
-            if (layer < 0)
-            {
-                Plugin.Log.LogInfo("Layer 'HornetCapture' does not exist; capturing all layers (will include scenery).");
-                layer = hero.layer;
-            }
-            SetLayerRecursive(hero, layer);
-            _camera.cullingMask = 1 << layer;
-            _camera.transform.position = hero.transform.position + new Vector3(0f, 0f, -10f);
-            _camera.transform.rotation = Quaternion.identity;
-            _camera.Render();
-            return _rt;
+            cam.targetTexture = rt;
+            cam.Render();
+            RenderTexture.active = rt;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            tex.Apply();
+            RenderTexture.active = null;
+            Color32[] px = tex.GetPixels32();
+            Object.Destroy(tex);
+            return px;
         }
 
-        private static void EnsureCamera()
+        private static List<Renderer> VisibleRenderers(HeroController hero)
         {
-            if (_camera != null)
+            var list = new List<Renderer>();
+            foreach (Renderer r in hero.GetComponentsInChildren<Renderer>(true))
             {
-                return;
+                if (r is SpriteRenderer || r.GetType().Name == "MeshRenderer")
+                {
+                    list.Add(r);
+                }
             }
-
-            var go = new GameObject("HornetExporterCamera");
-            Object.DontDestroyOnLoad(go);
-            _camera = go.AddComponent<Camera>();
-            _camera.clearFlags = CameraClearFlags.SolidColor;
-            _camera.backgroundColor = new Color(0f, 0f, 0f, 0f);
-            _camera.orthographic = true;
-            _camera.orthographicSize = 5f;
-            _camera.enabled = false; // manual Render()
-
-            _rt = new RenderTexture(Size, Size, 16, RenderTextureFormat.ARGB32);
-            _camera.targetTexture = _rt;
-        }
-
-        private static void SetLayerRecursive(GameObject go, int layer)
-        {
-            go.layer = layer;
-            for (int i = 0; i < go.transform.childCount; i++)
-            {
-                SetLayerRecursive(go.transform.GetChild(i).gameObject, layer);
-            }
+            return list;
         }
     }
 }
