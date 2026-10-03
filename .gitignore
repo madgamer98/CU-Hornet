@@ -14,6 +14,7 @@ _decomp/
 decomp/
 extracted/
 assets_src/
+tools/out/
 
 # releases / packages
 dist/

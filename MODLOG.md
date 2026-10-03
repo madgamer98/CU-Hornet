@@ -122,7 +122,40 @@ CU's player controller.
   ~ (1496, 640), **Start** ~ (960, 874).
 - **Launch note:** if launched by exe, prefer `um win launch`.
 
+## Hornet asset extraction (Silksong 6000.0.50f1)
+- Silksong content is in **Addressables**: `Hollow Knight Silksong_Data\StreamingAssets\aa\StandaloneWindows64\**\*.bundle`
+  (2068 bundles, 7.7 GB) + `resources.assets`. Use **UnityPy 1.25.3** with
+  `UnityPy.config.FALLBACK_UNITY_VERSION = "6000.0.50f1"` (bundles have no readable version header).
+- The player character uses **tk2d** (`TeamCherry.TK2D.dll`). Crest bundles: architect/beast/cloakless/
+  reaper/shaman/wanderer/witch — **no "hunter" bundle**, so the Hunter crest is the base/Default
+  (`HeroControllerConfig` "Default" has no `heroAnimOverrideLib`).
+- Key assets:
+  - `herocollections_assets_shared.bundle` → tk2d collections incl. **`Hornet Cln`** (116 sprites,
+    cloaked/cloak) and `Knight` (1828, legacy).
+  - `herocollections_assets_crest*.bundle` → per-crest weapon collections.
+  - `herodynamic_assets_all.bundle` → tk2d `tk2dSpriteAnimation` libraries. The base Hornet lib
+    referencing `Hornet Cln` has Idle/Turn/Run/Jump/Fall/Soft Land/Evade/Throw Side/Harpoon Side (cloaked).
+    The full 408-clip moveset references `Hornet Cloakless Cln` (black body, Slash/Dash/Bind/...).
+  - Frame sprite names encode clip+index (`Hornet_idle_cloakless0000`, `jump_cloakless0000`, ...).
+  - tk2d packs sprites **rotated/flipped** in the atlas; `regionW/H` are 0, rect comes from UVs.
+- Tools written: `tools/scan_bundle.py`, `probe_hero.py`, `probe_anims.py`, `list_clips.py`,
+  `find_cab.py`, `find_cloak.py`, `compare_names.py`, `diag_atlas.py`, `diag_swap.py`,
+  `import_hornet.py` (bake frames), `export_hornet_render.py` (atlas+quads).
+
+## BLOCKER (2026-10-02)
+- **CU's MeshRenderer is not available at runtime.** `go.AddComponent<MeshRenderer>()` returns **null**
+  (logged `init step 1b (renderer null=True)`), so the plan to draw Silksong's quads as meshes fails.
+  `VisionMask` declares `[RequireComponent(MeshRenderer)]` but appears to be stripped/dead in this build.
+  `SpriteRenderer` is available (the game uses it everywhere).
+- **Baking tk2d frames to textures in Python is fighting the atlas packing.** `import_hornet.py` samples
+  each frame's UV quad; applying a global 90° rotation makes `Idle` upright but leaves some `Run`/`Jump`
+  frames sideways, so our positions↔uvs↔atlas orientation convention is still wrong. Need the exact tk2d
+  convention (or let Unity render it).
+- **Recommended fix (accuracy + robustness): a one-time exporter *inside Silksong*** — a small BepInEx
+  plugin that, on a hotkey, renders each Hornet tk2d frame with Silksong's own Unity renderer to a
+  RenderTexture and writes PNG + pivot. Unity handles rotation/material; CU then uses SpriteRenderer.
+  This matches the "port the rendering" idea without reimplementing MeshRenderer.
+
 ## Next
-- **Extract Hornet's art + animations from the user's Silksong install** (the current critical path).
-  Then replace the placeholder with real frames and add animation state.
+- Decide on the Silksong-side frame exporter (recommended) vs continuing to reverse tk2d's atlas packing.
 - Then Hornet's moveset (Stage 2).

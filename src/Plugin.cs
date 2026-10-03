@@ -21,6 +21,9 @@ namespace HornetInCasualties
         internal static ConfigEntry<bool> Enable;
         internal static ConfigEntry<bool> HideVanillaBody;
         internal static ConfigEntry<bool> DebugKeys;
+        internal static ConfigEntry<float> AvatarScale;
+        internal static ConfigEntry<float> AvatarOffsetX;
+        internal static ConfigEntry<float> AvatarOffsetY;
 
         private Harmony _harmony;
 
@@ -29,10 +32,13 @@ namespace HornetInCasualties
             Instance = this;
             Log = Logger;
             Enable = Config.Bind("General", "Enable", true, "Draw Hornet on the player.");
-            HideVanillaBody = Config.Bind("General", "HideVanillaBody", false,
+            HideVanillaBody = Config.Bind("General", "HideVanillaBody", true,
                 "Hide the vanilla experiment's body sprites while Hornet is shown.");
             DebugKeys = Config.Bind("Dev", "DebugKeys", true,
                 "F10 starts a run from the menu (dev oracle). F11 toggles the vanilla body.");
+            AvatarScale = Config.Bind("Avatar", "Scale", 1.0f, "Hornet sprite scale.");
+            AvatarOffsetX = Config.Bind("Avatar", "OffsetX", 0f, "Hornet horizontal offset (in sprite units).");
+            AvatarOffsetY = Config.Bind("Avatar", "OffsetY", 0f, "Hornet vertical offset (in sprite units).");
 
             _harmony = new Harmony(Guid);
             _harmony.PatchAll();
@@ -84,6 +90,42 @@ namespace HornetInCasualties
     {
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.F1))
+            {
+                Plugin.AvatarScale.Value = Mathf.Max(0.1f, Plugin.AvatarScale.Value - 0.1f);
+                Plugin.Log.LogInfo("Scale = " + Plugin.AvatarScale.Value);
+            }
+            if (Input.GetKeyDown(KeyCode.F2))
+            {
+                Plugin.AvatarScale.Value += 0.1f;
+                Plugin.Log.LogInfo("Scale = " + Plugin.AvatarScale.Value);
+            }
+            if (Input.GetKeyDown(KeyCode.F3))
+            {
+                Plugin.AvatarOffsetY.Value -= 0.1f;
+                Plugin.Log.LogInfo("OffsetY = " + Plugin.AvatarOffsetY.Value);
+            }
+            if (Input.GetKeyDown(KeyCode.F4))
+            {
+                Plugin.AvatarOffsetY.Value += 0.1f;
+                Plugin.Log.LogInfo("OffsetY = " + Plugin.AvatarOffsetY.Value);
+            }
+            if (Input.GetKeyDown(KeyCode.F5))
+            {
+                Plugin.AvatarOffsetX.Value -= 0.1f;
+                Plugin.Log.LogInfo("OffsetX = " + Plugin.AvatarOffsetX.Value);
+            }
+            if (Input.GetKeyDown(KeyCode.F6))
+            {
+                Plugin.AvatarOffsetX.Value += 0.1f;
+                Plugin.Log.LogInfo("OffsetX = " + Plugin.AvatarOffsetX.Value);
+            }
+            if (Input.GetKeyDown(KeyCode.F11))
+            {
+                Plugin.HideVanillaBody.Value = !Plugin.HideVanillaBody.Value;
+                Plugin.Log.LogInfo("HideVanillaBody = " + Plugin.HideVanillaBody.Value);
+            }
+
             if (Input.GetKeyDown(KeyCode.F9))
             {
                 PreRunScript pre = PreRunScript.instance;

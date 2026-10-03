@@ -1,17 +1,20 @@
+using System.IO;
 using UnityEngine;
 
 namespace HornetInCasualties
 {
     /// <summary>
     /// The visible Hornet that rides the vanilla player's physics body.
-    /// Stage 1 uses a generated placeholder sprite; later stages swap in the real
-    /// Hornet frames loaded from the user's Silksong install.
+    /// Frames come from the user's own Silksong install and are drawn as quads
+    /// (see HornetSprites); the clip is chosen from the vanilla Body's state.
     /// </summary>
     public class HornetAvatar : MonoBehaviour
     {
         private Body _body;
         private Transform _sprite;
-        private SpriteRenderer _renderer;
+        private SpriteRenderer _placeholder;
+        private MeshRenderer _meshRenderer;
+        private HornetMeshAnimator _animator;
 
         public static HornetAvatar Ensure(Body body)
         {
@@ -20,7 +23,6 @@ namespace HornetInCasualties
                 return null;
             }
 
-            // The avatar component lives on the Body itself, so it dies with the player.
             HornetAvatar existing = body.GetComponent<HornetAvatar>();
             if (existing != null)
             {
@@ -28,8 +30,15 @@ namespace HornetInCasualties
             }
 
             HornetAvatar avatar = body.gameObject.AddComponent<HornetAvatar>();
-            avatar.Init(body);
-            Plugin.Log.LogInfo("HornetAvatar attached to the player.");
+            try
+            {
+                avatar.Init(body);
+                Plugin.Log.LogInfo("HornetAvatar attached to the player.");
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogError("HornetAvatar init failed: " + e);
+            }
             return avatar;
         }
 
@@ -41,9 +50,43 @@ namespace HornetInCasualties
             go.transform.SetParent(body.transform, false);
             _sprite = go.transform;
 
-            _renderer = go.AddComponent<SpriteRenderer>();
-            _renderer.sprite = PlaceholderSprite.Create();
-            _renderer.sortingOrder = 5000;
+            _placeholder = go.AddComponent<SpriteRenderer>();
+            _placeholder.sprite = PlaceholderSprite.Create();
+            _placeholder.sortingOrder = 5000;
+
+            Plugin.Log.LogInfo("init step 1 (placeholder ok)");
+            var filter = go.AddComponent<MeshFilter>();
+            Plugin.Log.LogInfo("init step 1a (filter)");
+            _meshRenderer = go.AddComponent<MeshRenderer>();
+            Plugin.Log.LogInfo("init step 1b (renderer null=" + (_meshRenderer == null) + ")");
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.sortingOrder = 5001;
+            }
+            Plugin.Log.LogInfo("init step 1b2 (sorting ok)");
+            _animator = go.AddComponent<HornetMeshAnimator>();
+            Plugin.Log.LogInfo("init step 1c (animator null=" + (_animator == null) + ")");
+            if (_animator != null)
+            {
+                _animator.Init(filter, _meshRenderer);
+            }
+            Plugin.Log.LogInfo("init step 2 (mesh components ok)");
+
+            if (!HornetSprites.Ready)
+            {
+                string dir = Plugin.Instance != null && Plugin.Instance.Info != null
+                    ? Path.GetDirectoryName(Plugin.Instance.Info.Location)
+                    : null;
+                Plugin.Log.LogInfo("init step 3 (dir=" + (dir ?? "<null>") + ")");
+                HornetSprites.Load(dir);
+            }
+
+            if (HornetSprites.Ready)
+            {
+                _placeholder.enabled = false;
+                _animator.Play("Idle");
+                Plugin.Log.LogInfo("Hornet avatar using extracted frames.");
+            }
         }
 
         private void LateUpdate()
@@ -53,12 +96,57 @@ namespace HornetInCasualties
                 return;
             }
 
-            Transform anchor = _body.baseLimb != null ? _body.baseLimb.transform : _body.transform;
-            Vector3 p = anchor.position;
-            _sprite.position = new Vector3(p.x, p.y, p.z - 0.02f);
+            bool ready = HornetSprites.Ready;
+            _placeholder.enabled = !ready && Plugin.Enable.Value;
+            _meshRenderer.enabled = ready && Plugin.Enable.Value;
+            if (!Plugin.Enable.Value)
+            {
+                return;
+            }
+
+            Vector3 p = _body.transform.position;
+            float scale = Plugin.AvatarScale.Value;
+            _sprite.position = new Vector3(
+                p.x + Plugin.AvatarOffsetX.Value * scale,
+                p.y + Plugin.AvatarOffsetY.Value * scale,
+                p.z - 0.02f);
             _sprite.rotation = Quaternion.identity;
-            _renderer.flipX = !_body.isRight;
-            _renderer.enabled = Plugin.Enable.Value;
+            float sx = _body.isRight ? scale : -scale;
+            _sprite.localScale = new Vector3(sx, scale, 1f);
+
+            if (ready)
+            {
+                _animator.Play(ChooseClip());
+            }
+
+            if (Plugin.HideVanillaBody.Value && _body.limbs != null)
+            {
+                foreach (Limb limb in _body.limbs)
+                {
+                    if (limb == null)
+                    {
+                        continue;
+                    }
+                    SpriteRenderer sr = limb.GetComponent<SpriteRenderer>();
+                    if (sr != null)
+                    {
+                        sr.enabled = false;
+                    }
+                }
+            }
+        }
+
+        private string ChooseClip()
+        {
+            float vy = _body.rb != null ? _body.rb.velocity.y : 0f;
+            float vx = _body.rb != null ? _body.rb.velocity.x : 0f;
+
+            if (!_body.grounded)
+            {
+                return vy > 1.5f ? "Jump" : "Fall";
+            }
+
+            return Mathf.Abs(vx) > 0.4f ? "Run" : "Idle";
         }
     }
 
@@ -88,11 +176,11 @@ namespace HornetInCasualties
                     Color32 c;
                     if (head)
                     {
-                        c = new Color32(220, 60, 60, 255);      // Hornet red
+                        c = new Color32(220, 60, 60, 255);
                     }
                     else if (torso || legs)
                     {
-                        c = new Color32(240, 235, 230, 255);    // pale cloak/body
+                        c = new Color32(240, 235, 230, 255);
                     }
                     else
                     {
