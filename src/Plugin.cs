@@ -166,10 +166,11 @@ namespace HornetInCasualties
     internal static class BodyJumpPatch
     {
         // Hornet owns jumping (ground/double/wall) so the ragdoll's flaky grounded flag can't
-        // trigger repeated vanilla jumps. Returning false skips CU's Jump entirely.
+        // trigger repeated vanilla jumps. Only skip CU's Jump when the Hornet controller is
+        // actually installed (i.e. not in LiveMode, where we don't add it).
         private static bool Prefix()
         {
-            return !Plugin.EnableMoves.Value;
+            return !(Plugin.EnableMoves.Value && !Plugin.LiveMode.Value);
         }
     }
 
