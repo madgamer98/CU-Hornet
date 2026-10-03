@@ -40,9 +40,9 @@ namespace HornetInCasualties
                 "Hide the vanilla experiment while Hornet is shown.");
             LiveMode = Config.Bind("Passthrough", "LiveMode", true,
                 "Run the live passthrough link to Silksong (required).");
-            AvatarScale = Config.Bind("Avatar", "Scale", 0.6f, "Hornet sprite scale.");
-            AvatarOffsetX = Config.Bind("Avatar", "OffsetX", 0f, "Hornet horizontal offset (sprite units).");
-            AvatarOffsetY = Config.Bind("Avatar", "OffsetY", -0.2f, "Hornet vertical offset (sprite units).");
+            AvatarScale = Config.Bind("Avatar", "Scale", 1.6f, "Hornet sprite scale.");
+            AvatarOffsetX = Config.Bind("Avatar", "OffsetX", 0.2f, "Hornet horizontal offset (sprite units).");
+            AvatarOffsetY = Config.Bind("Avatar", "OffsetY", -0.1f, "Hornet vertical offset (sprite units).");
             DebugKeys = Config.Bind("Dev", "DebugKeys", true,
                 "F1/F2 scale, F3/F4 offsetY, F5/F6 offsetX. F9 tutorial, F10 run.");
 
