@@ -502,17 +502,42 @@ Protocol v8 adds an **`Events` ring** (Silksong -> CU): single writer/reader, mo
   `InputInjector` re-arms on release). Wall jumps don't set the gate. Verified by the human: ground jump
   is clean, a second press gives the wings, wall-jump→double-jump still works.
 
+## S4 phase 3 — actor → Hornet damage (2026-10-03, BUILT, awaiting in-game verification)
+Protocol unchanged (still v8): this reuses the existing `EntFlagContactDamage` bit, so no layout bump.
+- **Key fact (from the deployed Silksong log):** Hornet's `HeroBox` is on **layer 20**, and the physics
+  matrix is **not** ignored between 20 and the proxy layer **19** (`ignored vs 19` lists 0,1,2,4,5,7,9,
+  10,11,12,13,14,15,16,18,19,21,23,24,25,26,27,30,31 — 20 and 17 are absent). So a `DamageHero` placed
+  **directly on the existing proxy root** is enough; no extra collider/layer juggling.
+- **CU (`src/LiveLink.cs`):** `PublishEntities` now sets `EntFlagContactDamage` when the actor carries a
+  `SpiderHandler` (CU's limb-biting animal class; `SpiderHandlerTBE` derives from it).
+- **Silksong (`silksong/src/EntityProxies.cs`):** every proxy gets a `DamageHero` (`hazardType = ENEMY`,
+  default `damageDealt = 0`). Each publish sets `damageDealt = ContactDamageAmount (1)` only when the
+  contact-damage flag is set. Hornet's own `HeroBox` then calls `HeroController.TakeDamage` with native
+  i-frames/knockback — no `HealthManager` needed. This also gives Silksong's own pogo cooldown
+  (`ContinueBounceTrigger` → `DamageHero.SetCooldown(0.5)`, as on real enemies).
+- **Nail damage (resume item 2):** `silksong/src/ProxyRelay.cs` now reports Hornet's real damage:
+  reads the attack collider's `DamageEnemies`; if `useNailDamage`, uses
+  `PlayerData.instance.nailDamage * nailDamageMultiplier`; otherwise `damageDealt`; falls back to the
+  old fixed 5 if not found.
+- **Evidence hook:** `silksong/src/HeroHurtProbe.cs` postfixes `HeroController.TakeDamage` and logs
+  `HURT! ... dmg=N hazard=... hp A->B`, so a proxy hit is provable and the hp delta shows i-frames.
+- **To verify:** activate the mirror (F4), walk Hornet into a CU biter (console `spawn` an animal, or a
+  real `shadecrawler`); expect a Silksong-side `HURT!` line and Hornet's hurt clip, then brief
+  invulnerability on a second touch. Note: the F7 pogo dummy is *not* a biter (no contact-damage flag),
+  so it still pogoes without hurting her.
+
 ---
 
 ## RESUME HERE — next session (written 2026-10-03)
 
-**Branch:** `passthrough-live`. Latest commit `18501c1`. Both games were **closed** at the end of the
-session; nothing is left running.
+**Branch:** `passthrough-live`. Both games were **closed** at the end of the prior session; nothing is
+left running. **S4 phase 3 is built + deployed but not yet played** (see "S4 phase 3" above).
 
 **Working end-to-end today (all human-verified unless noted):**
 input round-trip (S0) → terrain mirror on CU's real block grid (S1 + real-run fix) → CU puppet (S2) →
 seams/watchdogs/moveset (S3) → **pogo off CU entities** (S4 P1) → **Hornet damages CU actors** (S4 P2) →
 **ground jump / double jump fixed** (S4). Real-run fall-through is fixed.
+**Built, needs a play test:** actor → Hornet contact damage + real nail damage (S4 P3).
 
 **Exact run recipe:**
 1. Launch CU (`um win launch --steam 4576510`) and Silksong (`--steam 1030300`).
@@ -525,17 +550,14 @@ seams/watchdogs/moveset (S3) → **pogo off CU entities** (S4 P1) → **Hornet d
   jump timing is unreliable — prefer the human for jump verification.
 
 **Immediate next steps (in priority order):**
-1. **Actor → Hornet damage** (the missing half of phase 2). Plan in `S4-SCOPE.md`: give each CU entity
-   proxy a `DamageHero` (hazardType from CU, `damageDealt` from CU) so Hornet's own `HeroBox` trigger
-   calls `HeroController.TakeDamage` with native i-frames/knockback; or send a `HeroDamaged` event. Add a
-   CU→Silk flag for "contact damage". Verify by letting a CU enemy/spike hit her.
-2. **Nail damage instead of fixed 5.** `ProxyRelay` hardcodes `HitDamage = 5f`; read Hornet's real nail
-   damage (see `HeroController`/`PlayerData` nail damage / `DamageEnemies`) and send that.
-3. **Blank-slate visual passthrough + scale** (human-deferred). `S4-SCOPE.md` §visual: dedicated capture
+1. **Verify S4 P3 in game** (built, unplayed): F4, walk Hornet into a CU biter; expect Silksong
+   `HURT! ... dmg=N hazard=ENEMY hp A->B`, hurt clip, then i-frames. If no `HURT!`, check the matrix /
+   that the actor actually carried a `SpiderHandler` (CU logs the contact-damage flag only for biters).
+2. **Blank-slate visual passthrough + scale** (human-deferred). `S4-SCOPE.md` §visual: dedicated capture
    camera culling *only* Hornet's layers (Player/Attack/Particle/Hero Only) with alpha-0 clear; lighting
    is the known unknown (earlier offscreen camera rendered dark). Scale: fix the capture PPU from Hornet's
    height and derive CU's display scale from `k` (drop the manual `Scale`/`Ppu`).
-4. Optional polish: pogo/hit FX feedback (`Bounce(id)` event), wall-cling test (needs CU walls), increase
+3. Optional polish: pogo/hit FX feedback (`Bounce(id)` event), wall-cling test (needs CU walls), increase
    entity stream radius/size if needed.
 
 **Gotchas a new session must know:**
@@ -547,7 +569,8 @@ seams/watchdogs/moveset (S3) → **pogo off CU entities** (S4 P1) → **Hornet d
 - **Mapping origin** is CU ground-contact ↔ Hornet feet (`_cuOrigin`/`_silkOrigin` stored in
   `TerrainMirror`); keep it consistent for terrain, entities, and the puppet.
 - Diagnostics currently enabled: Silksong state line every 30 frames (incl. `gnd`), `POGO!` on
-  `DownspikeBounce`, `Hit entity <id>` relay, CU damage lines. Trim when done.
+  `DownspikeBounce`, `HURT!` on `HeroController.TakeDamage`, `Hit entity <id>` relay, CU damage lines.
+  Trim when done.
 - Every code change needs a **game restart** (BepInEx loads DLLs at startup). CU builds deploy to
   `%STEAM_LIBRARY%\...\BepInEx\plugins\HornetInCasualties`; Silksong to
   `%STEAM_DIR%\...\BepInEx\plugins\HornetExporter`.

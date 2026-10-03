@@ -98,7 +98,10 @@ committing.
 ## Phased plan
 1. **Pogo slice** — ✅ **done/verified** (2026-10-03): entities stream + layer-19 pogo proxies; real enemy pogo confirmed.
 2. **Hornet → actor damage** — ✅ **done/verified**: `Events` ring + `ProxyRelay`; CU applied damage/killed a shadecrawler. Follow-up: use real nail damage instead of fixed 5.
-3. **Actor → Hornet damage** — ⬜ **next**: proxy `DamageHero` (or `HeroDamaged` event); verify Hornet takes damage with i-frames.
+3. **Actor → Hornet damage** — ✅ **built** (2026-10-03, awaiting play test): proxy `DamageHero`
+   (`hazardType = ENEMY`, `damageDealt` gated by CU's `EntFlagContactDamage`). Key finding: Hornet's
+   `HeroBox` is **layer 20** and the matrix allows 20↔19, so no extra collider is needed. CU flags biters
+   via `SpiderHandler`. Nail-damage follow-up done too (`ProxyRelay` reads `DamageEnemies`/nail damage).
 4. **Blank-slate capture** — ⬜ **deferred by human** (do after 3): dedicated camera → PNG; solve lighting; switch CU to consume it.
 5. **Scale unification** — ⬜ **deferred**: fixed capture PPU; derive CU display scale from `k`; delete manual tuning.
 

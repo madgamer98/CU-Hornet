@@ -400,6 +400,12 @@ namespace HornetInCasualties
                 {
                     flags |= Proto.EntFlagBounceable;
                 }
+                // S4 phase 3: biters damage Hornet on contact via a proxy DamageHero. CU animals
+                // damage limbs through SpiderHandler (and its subclasses), so use that as the signal.
+                if (be.GetComponent<SpiderHandler>() != null || be.GetComponentInParent<SpiderHandler>() != null)
+                {
+                    flags |= Proto.EntFlagContactDamage;
+                }
                 int eid = be.GetInstanceID() & 0xFFFFFF;
                 _entityById[eid] = be;
                 AddEnt(ref count, eid, b.center.x, b.center.y,

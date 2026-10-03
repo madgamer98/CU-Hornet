@@ -41,8 +41,40 @@ namespace HornetExporter
             {
                 return;
             }
-            link.PushEvent(Proto.EventHitEntity, EntityId, EntityProxies.HitDamage, 0f, 0f);
-            Plugin.Log.LogInfo("Hit entity " + EntityId + " for " + EntityProxies.HitDamage);
+            int damage = Mathf.RoundToInt(ReadAttackDamage(other, EntityProxies.HitDamage));
+            link.PushEvent(Proto.EventHitEntity, EntityId, damage, 0f, 0f);
+            Plugin.Log.LogInfo("Hit entity " + EntityId + " for " + damage);
+        }
+
+        /// <summary>
+        /// S4 follow-up: report Hornet's real nail damage instead of a fixed value. The attack
+        /// collider's DamageEnemies knows whether it uses the nail (and its multiplier) or a flat
+        /// value; fall back to the constant if the component cannot be found.
+        /// </summary>
+        private static float ReadAttackDamage(Collider2D attack, float fallback)
+        {
+            DamageEnemies de = attack.GetComponentInParent<DamageEnemies>();
+            if (de == null)
+            {
+                return fallback;
+            }
+            if (de.useNailDamage)
+            {
+                PlayerData pd = PlayerData.instance;
+                if (pd != null)
+                {
+                    int dmg = Mathf.RoundToInt((float)pd.nailDamage * de.nailDamageMultiplier);
+                    if (dmg > 0)
+                    {
+                        return dmg;
+                    }
+                }
+            }
+            else if (de.damageDealt > 0)
+            {
+                return de.damageDealt;
+            }
+            return fallback;
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GlobalEnums;
 using HornetPassthrough;
 using UnityEngine;
 
@@ -9,6 +10,10 @@ namespace HornetExporter
     /// mapping as the terrain mirror. Pogo discovery reuses Silksong's own down-spike path:
     /// a collider on layer 19 (INTERACTIVE_OBJECT) or 17 (HERO_ATTACK) makes
     /// HeroDownAttack.ContinueBounceTrigger fire without needing a heavyweight HealthManager.
+    ///
+    /// S4 phase 3: each proxy also carries a <see cref="DamageHero"/>. Hornet's HeroBox (layer 20)
+    /// collides with the proxy layer, so a CU biter's proxy damages her through Silksong's native
+    /// i-frame/knockback path. Entities without the contact-damage flag get damageDealt = 0.
     /// </summary>
     internal static class EntityProxies
     {
@@ -21,6 +26,9 @@ namespace HornetExporter
         private static readonly int AttackLayerPublic = 17; // PhysLayers.HERO_ATTACK
         public static int AttackLayer => AttackLayerPublic;
         public static float HitDamage = 5f;
+        // S4 phase 3: contact damage a CU biter deals to Hornet. Silksong's ENEMY hazard of 1
+        // costs one mask; CU bite damage is limb-based, so a flat 1 keeps it readable for now.
+        public const int ContactDamageAmount = 1;
 
         private static int ProxyLayer
         {
@@ -92,6 +100,14 @@ namespace HornetExporter
                 {
                     relay.EntityId = Mathf.RoundToInt(Values[v + 0]);
                 }
+                // S4 phase 3: a CU biter asks us to damage Hornet on contact.
+                DamageHero dh = go.GetComponent<DamageHero>();
+                if (dh != null)
+                {
+                    bool contact = (flags & Proto.EntFlagContactDamage) != 0;
+                    dh.hazardType = HazardType.ENEMY;
+                    dh.damageDealt = contact ? ContactDamageAmount : 0;
+                }
             }
             for (int i = count; i < Pool.Count; i++)
             {
@@ -149,6 +165,8 @@ namespace HornetExporter
                 go.transform.SetParent(_root.transform, false);
                 go.AddComponent<BoxCollider2D>();
                 go.AddComponent<ProxyRelay>();
+                DamageHero dh = go.AddComponent<DamageHero>();
+                dh.damageDealt = 0; // enabled per-entity from the contact-damage flag
                 Pool.Add(go);
             }
         }
