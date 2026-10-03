@@ -274,9 +274,22 @@ Both games run at once and exchange state over shared memory `Local\HornetPassth
 - **Verified:** CU log `received live Hornet frame 215x184`; screenshot shows lit Hornet in the sandbox.
 - Silksong layers dump: 0/1/2/4/5/7 Default..Attack Detector (listed in the log).
 
+## Passthrough polish (2026-10-03)
+- **Placement** user-tuned: `Scale=1.6 OffsetX=0.2 OffsetY=-0.1` now the defaults; vanilla body hidden;
+  feet-box ground test; frame-size clamp + size-jump guard.
+- **Old baked import removed:** deleted `HornetData`/`HornetController`/`HornetNeedle`; `HornetAvatar` is
+  just a marker that attaches `LiveLink`. CU is passthrough-only. Config keys: Enable, HideVanillaBody,
+  LiveMode, Avatar Scale/Offset, DebugKeys; action keys Slash=J/Dash=K/Needle=L.
+- **Smoothness:** Silksong publishes every frame (cached diff capture); stable.
+- **State sync:** CU publishes a flag bitfield (`FlagAttack/Dash/Needle/Up/Down`) plus pos/vel/grounded/
+  facing; Silksong maps it to Hornet clips (Slash/UpSlash/DownSpike/Dash/NeedleThrow Throwing, and
+  Airborne/Fall/Run/Idle), flips Hornet to match facing, and scales `tk2dSpriteAnimator.ClipFps` by speed.
+  Verified: pressing J/K/L in CU makes Silksong play Slash/Dash/NeedleThrow.
+- **Known:** CU's grounded flickers so clips flap Airborne/Fall; wants hysteresis or a better ground test.
+
 ## Next (passthrough)
-- Tune live position/scale/pivot; hide the vanilla body in LiveMode; raise publish rate / cut latency.
-- Then delete the old baked-import code (`HornetData`, baked `HornetAvatar`, `HornetController`, configs).
+- Stabilise grounded (hysteresis) and movement thresholds; add a watchdog (Silksong gone → restore normal).
+- Optional packet/presentation polish; then showcase + publish notes.
 - Bind/heal; verify pogo/double jump/wall in game.
 - Un-premultiply capture color; tune scale/offset.
 - Optional: live state link.
