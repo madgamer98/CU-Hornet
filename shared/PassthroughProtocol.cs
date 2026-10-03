@@ -15,7 +15,7 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 7;
+        public const int Version = 8;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -43,7 +43,13 @@ namespace HornetPassthrough
         public const int EntityRecordSize = EntityStrideFloats * 4;
         public const int EntitiesRecordsOffset = EntitiesOffset + EntityHeaderSize;
         public const int EntitiesSize = EntityHeaderSize + MaxEntities * EntityRecordSize;
-        public const long MappingSize = EntitiesOffset + EntitiesSize;
+        public const int EventsOffset = EntitiesOffset + EntitiesSize;
+        public const int EventsHeaderSize = 16;
+        public const int MaxEvents = 64;
+        public const int EventRecordSize = 32;
+        public const int EventRecordsOffset = EventsOffset + EventsHeaderSize;
+        public const int EventsSize = EventsHeaderSize + MaxEvents * EventRecordSize;
+        public const long MappingSize = EventsOffset + EventsSize;
 
         // Raw button bits (Input region, CU -> Silksong). Mirrors the host's real binds.
         public const int BtnLeft = 1 << 0;
@@ -129,6 +135,20 @@ namespace HornetPassthrough
         public const int EntFlagBounceable = 1 << 0;
         public const int EntFlagContactDamage = 1 << 1;
         public const int EntFlagAlive = 1 << 2;
+
+        // Events ring (Silksong -> CU). Single writer, single reader; records carry a monotonic index.
+        public const int EV_WriteIndex = 0; // int, total events ever written
+
+        // Event record fields (offsets within a record)
+        public const int EVR_Type = 0;   // int
+        public const int EVR_Id = 4;     // int (entity id)
+        public const int EVR_A = 8;      // float
+        public const int EVR_B = 12;     // float
+        public const int EVR_C = 16;     // float
+        public const int EVR_Index = 20; // int, equals the ring index (tear check)
+
+        // Event types
+        public const int EventHitEntity = 1; // A = damage, B/C = hit direction (unused for now)
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -377,6 +397,44 @@ namespace HornetPassthrough
             }
             count = n;
             lastRevision = revision;
+            return true;
+        }
+
+        // ---- Events ring (Silksong -> CU) ----
+        public void PushEvent(int type, int id, float a, float b, float c)
+        {
+            int idx = ReadInt(Proto.EventsOffset + Proto.EV_WriteIndex);
+            int at = Proto.EventRecordsOffset + (idx % Proto.MaxEvents) * Proto.EventRecordSize;
+            WriteInt(at + Proto.EVR_Type, type);
+            WriteInt(at + Proto.EVR_Id, id);
+            WriteFloat(at + Proto.EVR_A, a);
+            WriteFloat(at + Proto.EVR_B, b);
+            WriteFloat(at + Proto.EVR_C, c);
+            WriteInt(at + Proto.EVR_Index, idx);
+            WriteInt(Proto.EventsOffset + Proto.EV_WriteIndex, idx + 1);
+        }
+
+        public int EventWriteIndex
+        {
+            get { return ReadInt(Proto.EventsOffset + Proto.EV_WriteIndex); }
+        }
+
+        /// <summary>Read one event by absolute index. False if it was overwritten by the ring.</summary>
+        public bool ReadEvent(int idx, out int type, out int id, out float a, out float b, out float c)
+        {
+            int at = Proto.EventRecordsOffset + (idx % Proto.MaxEvents) * Proto.EventRecordSize;
+            if (ReadInt(at + Proto.EVR_Index) != idx)
+            {
+                type = 0;
+                id = 0;
+                a = b = c = 0f;
+                return false;
+            }
+            type = ReadInt(at + Proto.EVR_Type);
+            id = ReadInt(at + Proto.EVR_Id);
+            a = ReadFloat(at + Proto.EVR_A);
+            b = ReadFloat(at + Proto.EVR_B);
+            c = ReadFloat(at + Proto.EVR_C);
             return true;
         }
 

@@ -18,7 +18,9 @@ namespace HornetExporter
         private static int _lastRev = -1;
         private static int _layer = -1;
 
-        private static readonly int AttackLayer = 17; // PhysLayers.HERO_ATTACK
+        private static readonly int AttackLayerPublic = 17; // PhysLayers.HERO_ATTACK
+        public static int AttackLayer => AttackLayerPublic;
+        public static float HitDamage = 5f;
 
         private static int ProxyLayer
         {
@@ -85,6 +87,11 @@ namespace HornetExporter
                 BoxCollider2D box = go.GetComponent<BoxCollider2D>();
                 box.isTrigger = true;
                 box.size = new Vector2(Mathf.Max(w, 0.2f) * k, Mathf.Max(h, 0.2f) * k);
+                ProxyRelay relay = go.GetComponent<ProxyRelay>();
+                if (relay != null)
+                {
+                    relay.EntityId = Mathf.RoundToInt(Values[v + 0]);
+                }
             }
             for (int i = count; i < Pool.Count; i++)
             {
@@ -141,6 +148,7 @@ namespace HornetExporter
                 var go = new GameObject("ent" + Pool.Count);
                 go.transform.SetParent(_root.transform, false);
                 go.AddComponent<BoxCollider2D>();
+                go.AddComponent<ProxyRelay>();
                 Pool.Add(go);
             }
         }

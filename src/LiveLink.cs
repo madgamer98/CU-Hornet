@@ -38,9 +38,11 @@ namespace HornetInCasualties
         private readonly float[] _entBuf = new float[Proto.MaxEntities * Proto.EntityStrideFloats];
         private readonly Collider2D[] _entHits = new Collider2D[256];
         private readonly List<GameObject> _dummies = new List<GameObject>();
+        private readonly List<float> _dummyHp = new List<float>();
+        private readonly Dictionary<int, BuildingEntity> _entityById = new Dictionary<int, BuildingEntity>();
         private Sprite _dummySprite;
         private int _entRev;
-        private float _puppetLogTimer;
+        private int _eventReadIndex;
 
         public void Init(Body body)
         {
@@ -112,17 +114,6 @@ namespace HornetInCasualties
                         EnablePuppet();
                     }
                     PuppetTo(hx, hy, hfacing);
-
-                    _puppetLogTimer -= Time.deltaTime;
-                    if (_puppetLogTimer <= 0f)
-                    {
-                        _puppetLogTimer = 0.5f;
-                        Vector3 bp = _body.transform.position;
-                        Vector3 bc = _body.col != null ? (Vector3)_body.col.bounds.center : bp;
-                        Plugin.Log.LogInfo("puppet: got=(" + hx.ToString("0.0") + "," + hy.ToString("0.0") +
-                                           ") body=(" + bp.x.ToString("0.0") + "," + bp.y.ToString("0.0") +
-                                           ") colCenter=(" + bc.x.ToString("0.0") + "," + bc.y.ToString("0.0") + ")");
-                    }
                 }
                 else if (Puppeting)
                 {
@@ -144,6 +135,8 @@ namespace HornetInCasualties
             {
                 SpawnDummy();
             }
+
+            DrainEvents();
 
             int w, h, fid;
             float px, py, wx, wy;
@@ -337,20 +330,7 @@ namespace HornetInCasualties
 
             _terrainRev++;
             _link.WriteTerrain(cb.size.y, anchor.x, anchor.y, _rectBuf, count, _terrainRev);
-
-            if (Mathf.Abs(anchor.y - _lastAnchorY) > 0.25f || count != _lastTerrainCount)
-            {
-                _lastAnchorY = anchor.y;
-                _lastTerrainCount = count;
-                Plugin.Log.LogInfo("terrain: count=" + count + " anchor=(" + anchor.x.ToString("0.0") + "," +
-                                   anchor.y.ToString("0.0") + ") groundHit=" + (ground.collider != null) +
-                                   " body=(" + _body.transform.position.x.ToString("0.0") + "," +
-                                   _body.transform.position.y.ToString("0.0") + ")");
-            }
         }
-
-        private float _lastAnchorY = float.NaN;
-        private int _lastTerrainCount = -1;
 
         /// <summary>Spawn a visible dummy near the player to pogo off (F7 in the sandbox).</summary>
         private void SpawnDummy()
@@ -374,6 +354,7 @@ namespace HornetInCasualties
             go.transform.localScale = new Vector3(1.2f, 1.2f, 1f);
             go.transform.position = _body.transform.position + new Vector3(0f, -0.4f, 0f);
             _dummies.Add(go);
+            _dummyHp.Add(100f);
             Plugin.Log.LogInfo("Spawned pogo dummy at " + go.transform.position);
         }
 
@@ -398,6 +379,7 @@ namespace HornetInCasualties
             }
 
             Vector2 c = _body.transform.position;
+            _entityById.Clear();
             int n = Physics2D.OverlapCircleNonAlloc(c, 30f, _entHits, ~0);
             for (int i = 0; i < n && count < Proto.MaxEntities; i++)
             {
@@ -417,7 +399,9 @@ namespace HornetInCasualties
                 {
                     flags |= Proto.EntFlagBounceable;
                 }
-                AddEnt(ref count, be.GetInstanceID() & 0xFFFFFF, b.center.x, b.center.y,
+                int eid = be.GetInstanceID() & 0xFFFFFF;
+                _entityById[eid] = be;
+                AddEnt(ref count, eid, b.center.x, b.center.y,
                     b.size.x, b.size.y, be.health, be.health, flags);
             }
 
@@ -438,6 +422,58 @@ namespace HornetInCasualties
             _entBuf[v + 6] = maxHp;
             _entBuf[v + 7] = flags;
             count++;
+        }
+
+        /// <summary>Drain Silksong's event ring and apply damage to CU actors.</summary>
+        private void DrainEvents()
+        {
+            if (_link == null)
+            {
+                return;
+            }
+            int writeIdx = _link.EventWriteIndex;
+            if (writeIdx - _eventReadIndex > Proto.MaxEvents)
+            {
+                _eventReadIndex = writeIdx - Proto.MaxEvents; // fell behind; skip overwritten
+            }
+            while (_eventReadIndex < writeIdx)
+            {
+                int type, id;
+                float a, b, c;
+                if (_link.ReadEvent(_eventReadIndex, out type, out id, out a, out b, out c) &&
+                    type == Proto.EventHitEntity)
+                {
+                    ApplyHit(id, a);
+                }
+                _eventReadIndex++;
+            }
+        }
+
+        private void ApplyHit(int id, float damage)
+        {
+            if (id >= 9000)
+            {
+                int di = id - 9000;
+                if (di < 0 || di >= _dummyHp.Count)
+                {
+                    return;
+                }
+                _dummyHp[di] -= damage;
+                Plugin.Log.LogInfo("Dummy " + id + " hit for " + damage + " -> hp " + _dummyHp[di]);
+                if (_dummyHp[di] <= 0f && di < _dummies.Count && _dummies[di] != null)
+                {
+                    UnityEngine.Object.Destroy(_dummies[di]);
+                }
+                return;
+            }
+
+            BuildingEntity be;
+            if (_entityById.TryGetValue(id, out be) && be != null)
+            {
+                be.health -= damage;
+                WorldGeneration.CreateDamageNumber(be.transform.position, Mathf.RoundToInt(damage));
+                Plugin.Log.LogInfo("Entity " + id + " hit for " + damage + " -> hp " + be.health);
+            }
         }
 
         // Hide the vanilla experiment's sprites the same way the baked port did.
