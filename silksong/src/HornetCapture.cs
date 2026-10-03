@@ -114,6 +114,9 @@ namespace HornetExporter
 
         // ---- Blank-slate capture (S4 visual): main camera, narrowed culling mask, alpha-0 clear ----
         private const int BlankCrop = 320; // fixed frame size so CU never reallocates its texture
+        // S5 task 1: HeroAttack (PhysLayers.HERO_ATTACK). Hornet's slash arcs live here, separate
+        // from her body on Player(9). They are kept visible in the blank render (see HideEffects).
+        private const int AttackLayer = 17;
         private static RenderTexture _blankRt;
         private static Texture2D _blankTex;
         private static int _blankW, _blankH;
@@ -164,7 +167,8 @@ namespace HornetExporter
 
             // Center the camera on Hornet for this render. The crop comes from a screen-sized RT and
             // is clamped to the screen, so when she was near the edge of Silksong's view the crop
-            // cut her off. Temporarily recentring (restored in finally) avoids that.
+            // cut her off. Temporarily recentring (restored in finally) avoids that. Slash arcs are
+            // close enough to fit the fixed crop (S5 task 1 keeps the body framing unchanged).
             Vector3 prevCamPos = cam.transform.position;
             cam.transform.position = new Vector3(hero.transform.position.x, hero.transform.position.y,
                                                  prevCamPos.z);
@@ -273,6 +277,9 @@ namespace HornetExporter
             // effects sit on Default(0)/Terrain(8)/Enemies(11) etc., which would drag the whole
             // environment into the "blank" render.
             _heroMask = 1 << 9;
+            // S5 task 1: keep Hornet's attack VFX (HERO_ATTACK) in the render so slash arcs pass
+            // through. The layer is hero-only, so no environment bleeds in.
+            _heroMask |= 1 << AttackLayer;
             if (!string.IsNullOrEmpty(LayerMask.LayerToName(28)))
             {
                 _heroMask |= 1 << 28;
@@ -660,7 +667,9 @@ namespace HornetExporter
             for (int i = 0; i < _effectCache.Count; i++)
             {
                 Renderer r = _effectCache[i];
-                if (r != null && r.enabled)
+                // S5 task 1: leave enabled HeroAttack renderers alone (slash arcs), so a swing can be
+                // captured. Everything else under Hornet (hero light/glow/dust) is still suppressed.
+                if (r != null && r.enabled && r.gameObject.layer != AttackLayer)
                 {
                     _blankHidden.Add(r);
                     r.enabled = false;

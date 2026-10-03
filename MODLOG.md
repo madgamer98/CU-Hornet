@@ -624,3 +624,31 @@ Real-run fall-through is fixed.
   `%STEAM_LIBRARY%\...\BepInEx\plugins\HornetInCasualties`; Silksong to
   `%STEAM_DIR%\...\BepInEx\plugins\HornetExporter`.
 
+
+## S5 task 1 - slash-arc VFX passthrough (2026-10-03, VERIFIED)
+
+Protocol unchanged (v8). Slash arcs were missing for two reasons: the blank capture's culling mask
+only had Player(9)|Hero Only(28), and `HideEffects` disabled every enabled non-body renderer under
+Hornet (the NailSlash `MeshRenderer` is a child of the hero). Layer 17 is `HERO_ATTACK`
+(`GlobalEnums/PhysLayers.cs`), hero-only, so adding it cannot drag in environment.
+
+- **`silksong/src/HornetCapture.cs`:**
+  - `_heroMask` now includes `1 << AttackLayer` (`AttackLayer = 17`).
+  - `HideEffects` skips enabled renderers on layer 17, so an active slash survives the effect
+    suppression (light/glow/dust still hidden).
+  - Framing unchanged: the camera still recentres on Hornet's transform, so the pivot stays exactly
+    `(0.5, 0.5)` and CU placement is unaffected. The arc fits inside the fixed 320 crop.
+- **CU unchanged:** with the camera staying on Hornet's transform the published pivot is always exactly
+  `(0.5, 0.5)`, so `ApplyFrame` needs no pivot handling.
+- `BlankCrop` stays **320** on purpose: the protocol's single-buffer seqlock tears at 384² (S4 lesson
+  3). The arc fits 320, so no bump needed.
+- **First attempt regressed and was reverted:** recentring the camera on the union of body + *all*
+  enabled layer-17 renderers moved the camera away from Hornet. Hornet has ~25 layer-17 renderers
+  (every crest's Slash/AltSlash/UpSlash/… variants, many on inactive objects whose `bounds` sit
+  elsewhere), so the fixed crop missed her entirely (`capture returned no frame xN`, body=1 effects=417).
+  Do **not** frame on "all enabled layer-17 renderers"; keep the camera on her transform. The
+  HeroAttack mask + `HideEffects` exception alone is what surfaces the arc.
+- **Verified:** drove CU (hold right + left-click) and recorded the window; Hornet's log shows
+  `SlashAlt`/`Slash` from the forwarded `BtnAttack`, and CU frames show the full white crescent around
+  her only during the swing (needle/idle before and after). Fits the 320 crop, no clipping.
+- Builds clean, both plugins deployed.
