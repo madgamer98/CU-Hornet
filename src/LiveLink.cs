@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using HornetPassthrough;
 using UnityEngine;
 
@@ -6,12 +7,19 @@ namespace HornetInCasualties
     /// <summary>
     /// Live passthrough (Casualties side, the host). Publishes the player's state and displays
     /// Hornet's isolated frame published by Silksong. No baked assets are used.
+    /// In S2 the host is also a puppet: Silksong's Hornet drives, and this sets the CU body to the
+    /// mapped position so the camera and rendering follow her.
     /// </summary>
     public class LiveLink : MonoBehaviour
     {
+        /// <summary>True while CU's body is driven by Silksong (Body.FixedUpdate is skipped).</summary>
+        public static bool Puppeting;
+
         private PassthroughLink _link;
         private Body _body;
         private int _lastFrameId;
+        private readonly List<Rigidbody2D> _frozen = new List<Rigidbody2D>();
+        private readonly List<RigidbodyType2D> _frozenTypes = new List<RigidbodyType2D>();
 
         private byte[] _buf;
         private byte[] _frameBytes;
@@ -82,6 +90,26 @@ namespace HornetInCasualties
             // S0: forward the host's raw buttons so Silksong's own controller reacts to them.
             _link.WriteInput(ReadButtons());
 
+            // S2: adopt Hornet's mapped position as CU's own, so the camera/render follow her.
+            float hx, hy, hvx, hvy;
+            int hfacing;
+            bool hgrounded, hactive;
+            if (_link.ReadPlayerState(out hx, out hy, out hvx, out hvy, out hfacing, out hgrounded, out hactive))
+            {
+                if (hactive)
+                {
+                    if (!Puppeting)
+                    {
+                        EnablePuppet();
+                    }
+                    PuppetTo(hx, hy, hfacing);
+                }
+                else if (Puppeting)
+                {
+                    DisablePuppet();
+                }
+            }
+
             // S1: publish a local window of ground AABBs so Silksong can collide against CU's world.
             _terrainTimer -= Time.deltaTime;
             if (_terrainTimer <= 0f)
@@ -105,10 +133,11 @@ namespace HornetInCasualties
             if (_display != null && _display.enabled)
             {
                 float scale = Plugin.AvatarScale.Value;
+                Vector3 cur = _body.transform.position;
                 _displayT.position = new Vector3(
-                    p.x + Plugin.AvatarOffsetX.Value * scale,
-                    p.y + Plugin.AvatarOffsetY.Value * scale,
-                    p.z - 0.02f);
+                    cur.x + Plugin.AvatarOffsetX.Value * scale,
+                    cur.y + Plugin.AvatarOffsetY.Value * scale,
+                    cur.z - 0.02f);
                 _displayT.rotation = Quaternion.identity;
                 _displayT.localScale = new Vector3(scale, scale, 1f);
                 _display.flipX = !_body.isRight;
@@ -153,6 +182,58 @@ namespace HornetInCasualties
             if (Input.GetKey(Plugin.KeyDash.Value.MainKey)) b |= Proto.BtnDash;
             if (Input.GetKey(Plugin.KeyNeedle.Value.MainKey)) b |= Proto.BtnNeedle;
             return b;
+        }
+
+        /// <summary>Freeze CU's ragdoll (kinematic) so Silksong can drive the transform.</summary>
+        private void EnablePuppet()
+        {
+            Puppeting = true;
+            _frozen.Clear();
+            _frozenTypes.Clear();
+            foreach (Rigidbody2D rb in _body.GetComponentsInChildren<Rigidbody2D>(true))
+            {
+                if (rb == null)
+                {
+                    continue;
+                }
+                _frozen.Add(rb);
+                _frozenTypes.Add(rb.bodyType);
+                rb.bodyType = RigidbodyType2D.Kinematic;
+            }
+            Plugin.Log.LogInfo("LiveLink: S2 puppet enabled (" + _frozen.Count + " rigidbodies frozen).");
+        }
+
+        private void PuppetTo(float x, float y, int facing)
+        {
+            if (_body == null)
+            {
+                return;
+            }
+            Vector3 np = new Vector3(x, y, _body.transform.position.z);
+            _body.transform.position = np;
+            if (_body.rb != null)
+            {
+                _body.rb.position = new Vector2(x, y);
+            }
+            if (facing != 0)
+            {
+                _body.isRight = facing > 0;
+            }
+        }
+
+        private void DisablePuppet()
+        {
+            Puppeting = false;
+            for (int i = 0; i < _frozen.Count; i++)
+            {
+                if (_frozen[i] != null)
+                {
+                    _frozen[i].bodyType = _frozenTypes[i];
+                }
+            }
+            _frozen.Clear();
+            _frozenTypes.Clear();
+            Plugin.Log.LogInfo("LiveLink: S2 puppet disabled.");
         }
 
         /// <summary>
@@ -202,8 +283,8 @@ namespace HornetInCasualties
                 {
                     continue;
                 }
-                _rectBuf[count * 4 + 0] = x0 - anchor.x;
-                _rectBuf[count * 4 + 1] = y0 - anchor.y;
+                _rectBuf[count * 4 + 0] = x0;
+                _rectBuf[count * 4 + 1] = y0;
                 _rectBuf[count * 4 + 2] = x1 - x0;
                 _rectBuf[count * 4 + 3] = y1 - y0;
                 count++;

@@ -74,6 +74,19 @@ namespace HornetExporter
                 _rb = hero.GetComponent<Rigidbody2D>();
             }
 
+            // S2: refresh the terrain proxy from the host window, then publish Hornet's state mapped
+            // back into CU coordinates so the host can puppet its body/camera to her.
+            TerrainMirror.Poll(_link);
+            float cuX, cuY;
+            bool active = TerrainMirror.TryMapToCu(hero.transform.position, out cuX, out cuY);
+            Vector2 hv = _rb != null ? _rb.linearVelocity : Vector2.zero;
+            float k = TerrainMirror.Scale;
+            int facing = hero.transform.localScale.x >= 0f ? 1 : -1;
+            bool grounded = hero.CheckTouchingGround();
+            _link.WritePlayerState(cuX, cuY,
+                k > 0.0001f ? hv.x / k : 0f, k > 0.0001f ? hv.y / k : 0f,
+                facing, grounded, active);
+
             // Diagnostics: log Hornet's own clip + velocity so we can prove input reached her.
             _stateTick++;
             if (_stateTick % 30 == 0)

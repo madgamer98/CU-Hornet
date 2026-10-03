@@ -15,7 +15,7 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 3;
+        public const int Version = 4;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -34,7 +34,9 @@ namespace HornetPassthrough
         public const int MaxRects = 256;
         public const int TerrainRectsOffset = TerrainOffset + TerrainHeaderSize;
         public const int TerrainSize = TerrainHeaderSize + MaxRects * 16;
-        public const long MappingSize = TerrainOffset + TerrainSize;
+        public const int PlayerStateOffset = TerrainOffset + TerrainSize;
+        public const int PlayerStateSize = 64;
+        public const long MappingSize = PlayerStateOffset + PlayerStateSize;
 
         // Raw button bits (Input region, CU -> Silksong). Mirrors the host's real binds.
         public const int BtnLeft = 1 << 0;
@@ -97,6 +99,17 @@ namespace HornetPassthrough
         public const int TH_Count = 4;
         public const int TH_PlayerHeight = 8; // float, CU player collider height (scale reference)
         public const int TH_Seq = 12;        // int seqlock
+
+        // PlayerState (Silksong -> CU): Hornet's state mapped back into CU coordinates by the
+        // fixed origin+scale captured when the terrain mirror was applied.
+        public const int PS_PosX = 0;        // float, CU-space position CU should adopt
+        public const int PS_PosY = 4;
+        public const int PS_VelX = 8;        // float, CU-space velocity
+        public const int PS_VelY = 12;
+        public const int PS_Facing = 16;     // +1 right, -1 left
+        public const int PS_Grounded = 20;   // 0/1
+        public const int PS_Active = 24;     // 1 when the mirror/mapping is live
+        public const int PS_Seq = 28;        // int seqlock
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -246,6 +259,44 @@ namespace HornetPassthrough
             count = n;
             lastRevision = revision;
             return true;
+        }
+
+        // ---- PlayerState (Silksong -> CU) ----
+        public void WritePlayerState(float x, float y, float vx, float vy, int facing, bool grounded, bool active)
+        {
+            int seq = ReadInt(Proto.PlayerStateOffset + Proto.PS_Seq);
+            WriteInt(Proto.PlayerStateOffset + Proto.PS_Seq, seq + 1);
+            WriteFloat(Proto.PlayerStateOffset + Proto.PS_PosX, x);
+            WriteFloat(Proto.PlayerStateOffset + Proto.PS_PosY, y);
+            WriteFloat(Proto.PlayerStateOffset + Proto.PS_VelX, vx);
+            WriteFloat(Proto.PlayerStateOffset + Proto.PS_VelY, vy);
+            WriteInt(Proto.PlayerStateOffset + Proto.PS_Facing, facing);
+            WriteInt(Proto.PlayerStateOffset + Proto.PS_Grounded, grounded ? 1 : 0);
+            WriteInt(Proto.PlayerStateOffset + Proto.PS_Active, active ? 1 : 0);
+            WriteInt(Proto.PlayerStateOffset + Proto.PS_Seq, seq + 2);
+        }
+
+        public bool ReadPlayerState(out float x, out float y, out float vx, out float vy, out int facing,
+            out bool grounded, out bool active)
+        {
+            x = y = vx = vy = 0f;
+            facing = 0;
+            grounded = false;
+            active = false;
+            int seq1 = ReadInt(Proto.PlayerStateOffset + Proto.PS_Seq);
+            if ((seq1 & 1) != 0)
+            {
+                return false;
+            }
+            x = ReadFloat(Proto.PlayerStateOffset + Proto.PS_PosX);
+            y = ReadFloat(Proto.PlayerStateOffset + Proto.PS_PosY);
+            vx = ReadFloat(Proto.PlayerStateOffset + Proto.PS_VelX);
+            vy = ReadFloat(Proto.PlayerStateOffset + Proto.PS_VelY);
+            facing = ReadInt(Proto.PlayerStateOffset + Proto.PS_Facing);
+            grounded = ReadInt(Proto.PlayerStateOffset + Proto.PS_Grounded) != 0;
+            active = ReadInt(Proto.PlayerStateOffset + Proto.PS_Active) != 0;
+            int seq2 = ReadInt(Proto.PlayerStateOffset + Proto.PS_Seq);
+            return seq1 == seq2;
         }
 
         // ---- Frame ----

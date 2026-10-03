@@ -14,7 +14,7 @@ namespace HornetInCasualties
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "dev.cuhornet.hornetincasualties";
-        public const string Version = "0.3.0";
+        public const string Version = "0.4.0";
 
         internal static ManualLogSource Log;
         internal static Plugin Instance;
@@ -88,6 +88,16 @@ namespace HornetInCasualties
             {
                 HornetAvatar.Ensure(body);
             }
+        }
+    }
+
+    /// <summary>S2: while Silksong drives the character, skip CU's own ragdoll movement.</summary>
+    [HarmonyPatch(typeof(Body), "FixedUpdate")]
+    internal static class BodyFixedUpdatePatch
+    {
+        private static bool Prefix()
+        {
+            return !LiveLink.Puppeting;
         }
     }
 

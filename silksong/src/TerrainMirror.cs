@@ -5,11 +5,15 @@ using UnityEngine;
 namespace HornetExporter
 {
     /// <summary>
-    /// S1 terrain mirror. Reads the host's local ground AABBs (CU units) and rebuilds them as
-    /// BoxCollider2Ds on layer 8 ("Terrain"), which is exactly the layer Silksong's ground checks
-    /// and physics already use (mask 0x2100 = layers 8 and 13). Vanilla terrain colliders are
-    /// disabled for the test so Hornet can only stand on the imported floor.
-    /// Triggered manually with F4 (apply) / F3 (restore).
+    /// S1/S2 terrain mirror. Reads the host's local ground AABBs (absolute CU units) and rebuilds
+    /// them as BoxCollider2Ds on layer 8 ("Terrain") — the layer Silksong's ground checks and physics
+    /// already use (mask 0x2100 = layers 8 and 13), so no mask patches are needed.
+    ///
+    /// A fixed mapping captured on apply keeps the floor stable while Hornet moves:
+    ///   cu(silk)   = _cuOrigin + (silk - _silkOrigin) / k
+    ///   silk(cu)   = _silkOrigin + k * (cu - _cuOrigin)
+    /// with k = HornetColliderHeight / CuPlayerColliderHeight.
+    /// Vanilla terrain is disabled so only the imported floor supports her (F4 apply / F3 restore).
     /// </summary>
     internal static class TerrainMirror
     {
@@ -19,9 +23,14 @@ namespace HornetExporter
         private static readonly float[] Rects = new float[Proto.MaxRects * 4];
         private static readonly List<Collider2D> Disabled = new List<Collider2D>();
         private static GameObject _root;
-        private static Vector2 _anchor;
+        private static Vector2 _cuOrigin;
+        private static Vector2 _silkOrigin;
+        private static float _k = 1f;
+        private static int _lastRev = -1;
+        private static int _hash;
 
         public static bool Active => _root != null;
+        public static float Scale => _k;
 
         public static void Restore()
         {
@@ -38,6 +47,8 @@ namespace HornetExporter
                 UnityEngine.Object.Destroy(_root);
                 _root = null;
             }
+            _lastRev = -1;
+            _hash = 0;
             Plugin.Log.LogInfo("TerrainMirror: restored vanilla terrain.");
         }
 
@@ -78,19 +89,95 @@ namespace HornetExporter
                 return;
             }
 
-            // One scale factor: Hornet's collider height per CU player collider height.
-            Bounds hb = heroCol.bounds;
-            float k = hb.size.y / playerHeight;
+            float cx, cy, cvx, cvy;
+            int cfacing;
+            bool cgrounded;
+            int cflags;
+            l.ReadCuState(out cx, out cy, out cvx, out cvy, out cfacing, out cgrounded, out cflags);
 
             Restore();
-            _anchor = new Vector2(hb.center.x, hb.min.y);
+            _cuOrigin = new Vector2(cx, cy);
+            _silkOrigin = new Vector2(hero.transform.position.x, hero.transform.position.y);
+            _k = heroCol.bounds.size.y / playerHeight;
+            _lastRev = revision;
+            _hash = HashRects(count);
 
             _root = new GameObject("CuTerrainMirror");
             _root.hideFlags = HideFlags.HideAndDontSave;
             UnityEngine.Object.DontDestroyOnLoad(_root);
 
             DisableVanillaTerrain();
+            BuildBoxes(count);
 
+            Vector3 p = new Vector3(_silkOrigin.x, _silkOrigin.y + 3f, hero.transform.position.z);
+            hero.transform.position = p;
+            Rigidbody2D rb = hero.GetComponent<Rigidbody2D>();
+            if (rb != null)
+            {
+                rb.position = p;
+                rb.linearVelocity = Vector2.zero;
+            }
+
+            Plugin.Log.LogInfo("TerrainMirror: applied " + count + " boxes k=" + _k.ToString("0.###") +
+                               " hornetH=" + heroCol.bounds.size.y.ToString("0.##") +
+                               " cuH=" + playerHeight.ToString("0.##") + " rev=" + revision);
+        }
+
+        /// <summary>Called each frame; rebuilds the proxy when the host's terrain window changes.</summary>
+        public static void Poll(PassthroughLink l)
+        {
+            if (_root == null || l == null)
+            {
+                return;
+            }
+            int count, revision;
+            float playerHeight;
+            if (!l.ReadTerrain(Rects, out count, out revision, out playerHeight, ref _lastRev))
+            {
+                return;
+            }
+            int hash = HashRects(count);
+            if (hash == _hash)
+            {
+                return;
+            }
+            _hash = hash;
+            BuildBoxes(count);
+        }
+
+        public static bool TryMapToCu(Vector2 silk, out float cuX, out float cuY)
+        {
+            if (_root == null || _k <= 0.0001f)
+            {
+                cuX = 0f;
+                cuY = 0f;
+                return false;
+            }
+            cuX = _cuOrigin.x + (silk.x - _silkOrigin.x) / _k;
+            cuY = _cuOrigin.y + (silk.y - _silkOrigin.y) / _k;
+            return true;
+        }
+
+        private static int HashRects(int count)
+        {
+            int h = count * 397;
+            for (int i = 0; i < count * 4; i++)
+            {
+                h = (h * 31) ^ Mathf.RoundToInt(Rects[i] * 8f);
+            }
+            return h;
+        }
+
+        private static void BuildBoxes(int count)
+        {
+            if (_root == null)
+            {
+                return;
+            }
+            for (int i = _root.transform.childCount - 1; i >= 0; i--)
+            {
+                UnityEngine.Object.Destroy(_root.transform.GetChild(i).gameObject);
+            }
             for (int i = 0; i < count; i++)
             {
                 float rx = Rects[i * 4 + 0], ry = Rects[i * 4 + 1];
@@ -103,18 +190,12 @@ namespace HornetExporter
                 go.layer = TerrainLayer;
                 go.transform.SetParent(_root.transform, false);
                 go.transform.position = new Vector3(
-                    _anchor.x + (rx + rw * 0.5f) * k,
-                    _anchor.y + (ry + rh * 0.5f) * k,
+                    _silkOrigin.x + (rx + rw * 0.5f - _cuOrigin.x) * _k,
+                    _silkOrigin.y + (ry + rh * 0.5f - _cuOrigin.y) * _k,
                     0f);
                 BoxCollider2D box = go.AddComponent<BoxCollider2D>();
-                box.size = new Vector2(rw * k, rh * k);
+                box.size = new Vector2(rw * _k, rh * _k);
             }
-
-            TeleportHeroAbove(hero, _anchor.y + 3f);
-            Plugin.Log.LogInfo("TerrainMirror: applied " + count + " boxes k=" + k.ToString("0.###") +
-                               " hornetH=" + hb.size.y.ToString("0.##") + " cuH=" + playerHeight.ToString("0.##") +
-                               " anchor=(" + _anchor.x.ToString("0.0") + "," + _anchor.y.ToString("0.0") +
-                               ") rev=" + revision);
         }
 
         private static void DisableVanillaTerrain()
@@ -139,18 +220,6 @@ namespace HornetExporter
                 }
             }
             Plugin.Log.LogInfo("TerrainMirror: disabled " + Disabled.Count + " vanilla terrain colliders.");
-        }
-
-        private static void TeleportHeroAbove(HeroController hero, float y)
-        {
-            Vector3 p = new Vector3(_anchor.x, y, hero.transform.position.z);
-            hero.transform.position = p;
-            Rigidbody2D rb = hero.GetComponent<Rigidbody2D>();
-            if (rb != null)
-            {
-                rb.position = p;
-                rb.linearVelocity = Vector2.zero;
-            }
         }
     }
 }

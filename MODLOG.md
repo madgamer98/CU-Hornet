@@ -368,3 +368,33 @@ reference), seqlock-guarded.
 - **Next (S2):** puppet CU's `Body`/camera to Hornet's mapped position, map absolute CU position to
   Silksong (fixed origin + `k`), refresh the terrain window as the player moves, and stop CU's own
   ragdoll/controller so input isn't duplicated.
+
+## S2 — puppet: Silksong drives, CU follows (2026-10-03, VERIFIED)
+Protocol bumped to `Version = 4`; adds a `PlayerState` region (Silksong -> CU) carrying Hornet's state
+**already mapped into CU coordinates**, plus facing/grounded/active.
+- **The mapping (fixed on apply):** `cu(silk) = _cuOrigin + (silk - _silkOrigin)/k`,
+  `silk(cu) = _silkOrigin + k*(cu - _cuOrigin)`, with `k = HornetH/CuPlayerH`. `_cuOrigin` = CU player
+  pos at apply, `_silkOrigin` = Hornet pos at apply — so nothing jumps on activation.
+- **Terrain rects are now absolute CU coords** (was relative). With the fixed mapping, the mirrored floor
+  stays put in Silksong while the CU window slides with the player.
+- **Silksong (`TerrainMirror`)** now keeps the mapping and `Poll()`s each frame: when CU's terrain
+  revision changes it rebuilds the proxy (no teleport) via a cheap rect hash. `LiveLink` publishes
+  `PlayerState` (mapped pos + velocity, facing, grounded, active) every frame.
+- **CU (`src/LiveLink.cs` + `src/Plugin.cs`):** on `active`, `EnablePuppet()` sets every `Rigidbody2D`
+  under `Body` to Kinematic (**17** frozen) and a Harmony **prefix on `Body.FixedUpdate`** returns false,
+  so CU's own ragdoll/controller stops. `PuppetTo()` then sets the body transform (and `rb.position`) to
+  the mapped pos each `LateUpdate`; the camera and Hornet's composited sprite follow. On `active=0`
+  (F3), `DisablePuppet()` restores the original body types.
+- **Verified in the real games:**
+  - F4 → Silksong `applied 8 boxes k=0.416`; CU `LiveLink: S2 puppet enabled (17 rigidbodies frozen)`.
+  - Hold **D** → Hornet ran `pos 20.3 → 36.1` grounded (`vel=(8.3,0)`); the CU screenshot shows the
+    sandbox camera scrolled with her and Hornet centered (composited). So the full M1 loop runs:
+    CU input → Silksong controller/physics on CU-mirrored terrain → mapped pos back → CU body/camera/render.
+  - F3 → Silksong `restored vanilla terrain`; CU `S2 puppet disabled`; Hornet landed safely on vanilla
+    ground (`pos 43.0 Idle vel=0`).
+- **Known issues:** occasional `Land To Run` flicker (micro-falls at proxy rect seams / rebuild timing);
+  the frame capture briefly returns tiny frames during room fades (already ignored by the size guard);
+  Silksong's real room-transition triggers still fire as she crosses the map; the mapping is fixed, so a
+  long run eventually leaves CU's actual floor and the proxy correctly disappears.
+- **Next (S3):** merge proxy rects (kill seams), widen/stream terrain more smoothly, add a watchdog
+  (Silksong gone → auto-unpuppet), then test dash/jump/wall/needle against CU geometry and the showcase.
