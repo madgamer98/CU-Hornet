@@ -713,9 +713,10 @@ header (`seq, width, height, hash, bufIndex, frameId, valid`) + `HudBuffers = 2`
   pattern as the blank Hornet capture. Skips when the HUD camera is inactive/off-screen or the frame
   has no alpha. The HUD canvas is `RenderMode.ScreenSpaceCamera` on `hudCamera`, so it renders into the
   RT correctly.
-- `silksong/src/LiveLink.cs`: computes a `HashVitals` thumbprint (health/max/blue/silk/silkMax/geo/
-  dead); when it changes (plus 2 settle frames) it captures and `WriteHud`s. **Not** every frame - this
-  is the bandwidth guardrail from the scope.
+- `silksong/src/LiveLink.cs`: publishes the HUD at a bounded cadence - **every 2nd frame (~30fps)** -
+  plus immediately on a vitals change (`HashVitals` of health/max/blue/silk/silkMax/geo/dead). Pure
+  on-change publishing (the first cut) froze whatever tween frame it caught last, e.g. a half-filled
+  silk bar, which read as un-smooth; half-res is the bandwidth guard, not the cadence.
 - `shared/PassthroughProtocol.cs`: `Version 11`; `HudOffset = VitalsOffset + VitalsSize`;
   `WriteHud`/`ReadHud` (off-buffer write then a short seqlock flip, like `WriteFrame`).
 - `src/HudOverlay.cs` (CU, new): a `DontDestroyOnLoad` screen-space `Canvas` + full-screen `RawImage`

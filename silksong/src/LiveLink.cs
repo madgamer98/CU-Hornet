@@ -32,7 +32,7 @@ namespace HornetExporter
         private int _capFail;
         private int _stateTick;
         private int _hudHash;
-        private int _hudSettle;
+        private int _hudTick;
         private bool _hudPublished;
         private int _hudFail;
 
@@ -142,16 +142,19 @@ namespace HornetExporter
                 _link.WriteVitals(pdv.health, pdv.maxHealth, pdv.healthBlue, pdv.silk, pdv.silkMax,
                     pdv.geo, dead);
 
-                // S5 2B: publish the HUD only when its vitals thumbprint changes (plus a couple of
-                // settle frames for HUD animations). Half-res, double-buffered - not every frame.
+                // S5 2B: publish the HUD at a bounded cadence (every 2nd frame, ~30fps) plus
+                // immediately on any vitals change. Pure on-change publishing froze whatever tween
+                // frame it caught last (e.g. a half-filled silk bar); half-res is the bandwidth guard,
+                // not the cadence.
                 int hudHash = HashVitals(pdv.health, pdv.maxHealth, pdv.healthBlue, pdv.silk,
                     pdv.silkMax, pdv.geo, dead);
-                if (hudHash != _hudHash)
+                _hudTick++;
+                bool dirty = hudHash != _hudHash;
+                if (dirty)
                 {
                     _hudHash = hudHash;
-                    _hudSettle = 2;
                 }
-                if (_hudSettle > 0 || !_hudPublished)
+                if (dirty || !_hudPublished || (_hudTick % 2 == 0))
                 {
                     byte[] hud;
                     int hw, hh;
@@ -160,10 +163,6 @@ namespace HornetExporter
                         _link.WriteHud(hud, hw, hh, hudHash);
                         _hudPublished = true;
                         _hudFail = 0;
-                        if (_hudSettle > 0)
-                        {
-                            _hudSettle--;
-                        }
                     }
                     else
                     {
