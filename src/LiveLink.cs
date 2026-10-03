@@ -213,6 +213,13 @@ namespace HornetInCasualties
 
             HideVanillaBody();
 
+            // S5 2C: second, late-frame pass so damage applied after Body.Update does not linger a
+            // whole frame.
+            if (Puppeting)
+            {
+                DamagePinner.Pin(_body);
+            }
+
             if (_display != null && _display.enabled)
             {
                 float scale = Plugin.AvatarScale.Value;

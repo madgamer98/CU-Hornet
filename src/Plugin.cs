@@ -101,6 +101,19 @@ namespace HornetInCasualties
         }
     }
 
+    /// <summary>S5 2C: while puppeting, revert CU's damage each frame (Silksong is the authority).</summary>
+    [HarmonyPatch(typeof(Body), "Update")]
+    internal static class BodyDamagePinPatch
+    {
+        private static void Postfix(Body __instance)
+        {
+            if (LiveLink.Puppeting)
+            {
+                DamagePinner.Pin(__instance);
+            }
+        }
+    }
+
     /// <summary>Live tuning for placement.</summary>
     internal class DebugHotkeys : MonoBehaviour
     {

@@ -713,11 +713,12 @@ header (`seq, width, height, hash, bufIndex, frameId, valid`) + `HudBuffers = 2`
   pattern as the blank Hornet capture. Skips when the HUD camera is inactive/off-screen or the frame
   has no alpha. The HUD canvas is `RenderMode.ScreenSpaceCamera` on `hudCamera`, so it renders into the
   RT correctly.
-- `silksong/src/LiveLink.cs`: publishes the HUD **every frame**. Cadence history: on-change-only froze
-  whatever tween frame it caught last (half-filled silk bar); every-2nd-frame (~30fps) still juddered
-  against the host's 60fps; the human asked for full cadence. Half-res is the bandwidth guard. The
-  vitals `HashVitals` is still sent so the host can see what changed. Verified the CU HUD pixel-matches
-  Silksong's own HUD (animated silk-thread art included), no tearing through the double buffer.
+- `silksong/src/LiveLink.cs`: publishes the HUD **every 3rd frame (~20fps)**, plus immediately on any
+  vitals change. Cadence history: on-change-only froze whatever tween frame it caught last (half-filled
+  silk bar); every-frame was the human's test then settled to every-3rd. Half-res is the bandwidth
+  guard. The vitals `HashVitals` is still sent so the host can see what changed. Verified the CU HUD
+  pixel-matches Silksong's own HUD (animated silk-thread art included), no tearing through the double
+  buffer.
 - `shared/PassthroughProtocol.cs`: `Version 11`; `HudOffset = VitalsOffset + VitalsSize`;
   `WriteHud`/`ReadHud` (off-buffer write then a short seqlock flip, like `WriteFrame`).
 - `src/HudOverlay.cs` (CU, new): a `DontDestroyOnLoad` screen-space `Canvas` + full-screen `RawImage`
@@ -731,3 +732,37 @@ spool/bar overlaid on the sandbox world, aligned with Silksong's own HUD when co
 transparently lets the CU world show through. One benign `HUD capture returned no frame (1x)` at
 startup (menu/transition, HUD camera inactive), then it published. A damage-driven mask-loss update is
 still worth an eyeball; publishing is gated on the vitals hash so any health/silk/geo change republishes.
+
+## S5 milestone 3 - CU damage pinned off (2C) + proxy-only damage gate (2E) (2026-10-03, built, awaiting human verify)
+
+Protocol unchanged (v11). Silksong's health is the authority while mirrored.
+
+### 2C - pin CU's damage off while puppeting
+- `src/DamagePinner.cs` (new): restores, every frame, `brainHealth = 100`, `bloodVolume >= 100`,
+  `venomTotal/internalBleeding/hemothorax/traumaAmount/radiationSickness/sicknessAmount = 0`, and each
+  limb's `skinHealth/muscleHealth = 100`, `bleedAmount/infectionAmount/pain = 0`. Survival meters
+  (hunger/thirst/temperature) are left running; only their damage is reverted.
+- Rolled in from `Body.Update` postfix (`BodyDamagePinPatch` in `src/Plugin.cs`) **and** late in
+  `LiveLink.LateUpdate`, so damage applied after `Body.Update` does not linger a frame. `Body` has no
+  `LateUpdate`, so the second pass lives in `LiveLink`.
+- `Body.FixedUpdate` was already skipped while puppeting.
+
+### 2E - only our CU proxies may hurt Hornet
+- `silksong/src/DamageGate.cs` (new): while `TerrainMirror.Active`, prefix-gates the centralized intake:
+  - `HeroController.TakeDamage`: allow only when `go.GetComponent<ContactDamage>() != null` (our
+    proxied CU biters; `ContactDamage` is the marker). Enemies/hazard damage routed through TakeDamage
+    are blocked.
+  - `DoSpecialDamage`, `TakeFrostDamage`, `TakeChompDamage`: return while mirrored.
+  - `DieFromHazard` / `HazardRespawn`: coroutines, so the prefix returns an **empty** IEnumerator via
+    `__result` (returning false alone would hand the caller null and `StartCoroutine` would throw).
+- Our proxy contact still lands: `ContactDamage.OnTriggerEnter` calls
+  `hero.TakeDamage(gameObject, ...)` on the proxy GameObject, which carries `ContactDamage`, so the
+  gate lets it through. Verified by inspection of `EntityProxies.EnsurePool` (adds `ContactDamage` to
+  each proxy `go`).
+
+Builds clean; both games restarted; mirror applied; HUD still renders; no Harmony/exception errors in
+either log. Still to verify by hand: (a) run into a console-spawned CU biter and confirm Hornet loses
+exactly 1 mask (proxy path survives the gate); (b) confirm CU's own spikes/biters can't hurt her and CU
+does not die (2C); (c) if reachable, confirm a native Silksong hazard/enemy no longer damages her (2E).
+Console text cannot be driven with `um win drive type` (CU's console ignores synthetic unicode), so the
+entity test needs the human.
