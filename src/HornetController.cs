@@ -38,39 +38,25 @@ namespace HornetInCasualties
             _avatar = avatar;
             _body = body;
             _rb = body.rb;
-            if (Plugin.KinematicMode.Value)
-            {
-                FreezeRagdoll();
-            }
+            Plugin.Log.LogInfo("Hornet: kinematic mode (limbs puppeted).");
         }
 
-        // Freeze the vanilla ragdoll limbs; Hornet moves the body as a single kinematic character.
-        private void FreezeRagdoll()
+        // Keep the ragdoll's colliders (they provide world collision) but stop it flopping by
+        // matching every limb's velocity to the body each physics step.
+        private void PuppetRagdoll()
         {
-            if (_body.limbs == null)
+            if (_body.limbs == null || _rb == null)
             {
                 return;
             }
+            Vector2 v = _rb.velocity;
             foreach (Limb limb in _body.limbs)
             {
-                if (limb == null)
+                if (limb != null && limb.rb != null)
                 {
-                    continue;
-                }
-                if (limb.rb != null)
-                {
-                    limb.rb.bodyType = RigidbodyType2D.Kinematic;
-                }
-                foreach (Collider2D c in limb.GetComponentsInChildren<Collider2D>(true))
-                {
-                    c.enabled = false;
+                    limb.rb.velocity = v;
                 }
             }
-            if (_body.col != null)
-            {
-                _body.col.enabled = true;
-            }
-            Plugin.Log.LogInfo("Hornet: ragdoll frozen (kinematic mode).");
         }
 
         private void FixedUpdate()
@@ -90,12 +76,14 @@ namespace HornetInCasualties
                     float accel = Plugin.MoveAccel.Value * (_body.grounded ? 1f : 0.65f);
                     float vx = Mathf.MoveTowards(_rb.velocity.x, target, accel * Time.fixedDeltaTime);
                     _rb.velocity = new Vector2(vx, _rb.velocity.y);
+                    PuppetRagdoll();
                 }
                 return;
             }
             _dashTime -= Time.fixedDeltaTime;
             _rb.gravityScale = 0f;
             _rb.MovePosition(_rb.position + new Vector2(_dashDir * Plugin.DashSpeed.Value * Time.fixedDeltaTime, 0f));
+            PuppetRagdoll();
             if (_dashTime <= 0f)
             {
                 _rb.gravityScale = 1f;

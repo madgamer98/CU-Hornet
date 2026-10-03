@@ -251,8 +251,10 @@ driving it headless is the full SkyCraft build.
   `MoveSpeed` with `MoveAccel`), dash (positional, no clamp), gravity. On init it **freezes the ragdoll**
   (limb rigidbodies → Kinematic, limb colliders disabled, root `col` kept). Wall-jump gate cleared via
   `BodyJumpPatch` (same-wall re-jump allowed).
-- **Needs in-game verification:** `grounded` was false in the (invalid, menu) test; check she stands on
-  the floor, can jump, and that freezing limbs didn't break CU ground detection/`standing`.
+- **Fall-through fix:** freezing the limb bodies (Kinematic + colliders off) removed the colliders the
+  world is actually collided against, so she fell through the floor. Replaced with **puppeting**: limbs
+  stay dynamic with colliders enabled; each FixedUpdate their velocity is set to the body's, so collision
+  works and the ragdoll can't flop. (`PuppetRagdoll`.)
 
 ## Next
 - Verify kinematic movement in the sandbox; fix grounded/standing if needed.
