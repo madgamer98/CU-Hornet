@@ -4,16 +4,16 @@ using UnityEngine;
 namespace HornetExporter
 {
     /// <summary>
-    /// Live passthrough (Silksong side). Reads the host player's state, drives Hornet's animator
-    /// to match, and publishes her isolated frame to shared memory. Step 1 publishes a 1x1 test
-    /// pixel to validate the channel; real pixels follow.
+    /// Live passthrough (Silksong side). Reads the host player's state, drives Hornet's animator to
+    /// match, and publishes the live animator state (clip name + frame + facing) so the host can
+    /// render her. Pixel streaming is attempted when a frame can be captured.
     /// </summary>
     public class LiveLink : MonoBehaviour
     {
         private PassthroughLink _link;
         private tk2dSpriteAnimator _anim;
-        private readonly byte[] _test = { 255, 0, 128, 255 };
         private int _lastClipHash;
+        private int _frameCounter;
 
         private void Awake()
         {
@@ -56,7 +56,6 @@ namespace HornetExporter
             {
                 return;
             }
-
             if (_anim == null)
             {
                 _anim = hero.GetComponentInChildren<tk2dSpriteAnimator>();
@@ -72,13 +71,11 @@ namespace HornetExporter
                 Plugin.Log.LogInfo("LiveLink: host state -> Hornet clip " + clip);
             }
 
-            byte[] rgba;
-            int w, h;
-            float px, py, wx, wy;
-            if (HornetCapture.CaptureRgba(out rgba, out w, out h, out px, out py, out wx, out wy))
-            {
-                _link.WriteFrame(rgba, w, h, px, py, wx, wy, hash);
-            }
+            string live = _anim != null && _anim.CurrentClip != null ? _anim.CurrentClip.name : clip;
+            int frame = _anim != null ? _anim.CurrentFrame : 0;
+
+            // State-only for now (safe). Pixel capture will be reintroduced throttled once stable.
+            _link.WriteLive(live, frame, facing, _frameCounter++);
         }
 
         private void OnDestroy()

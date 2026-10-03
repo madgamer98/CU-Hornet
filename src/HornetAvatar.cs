@@ -116,6 +116,13 @@ namespace HornetInCasualties
                 return;
             }
 
+            if (Plugin.LiveMode.Value)
+            {
+                // Passthrough mode: the baked port is disabled entirely; LiveLink draws Hornet.
+                _renderer.enabled = false;
+                return;
+            }
+
             _renderer.enabled = Plugin.Enable.Value;
             if (!Plugin.Enable.Value)
             {

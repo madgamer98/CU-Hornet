@@ -55,6 +55,10 @@ namespace HornetPassthrough
         public const int FO_WorldY = 24;
         public const int FO_ClipHash = 28; // stable hash of the current clip name
         public const int FO_FrameId = 32;  // increments each published frame
+        public const int FO_FrameIndex = 36; // frame within the current clip
+        public const int FO_Facing = 40;     // +1 right, -1 left
+        public const int FO_HasPixels = 44;  // 1 when the pixel buffer is valid
+        public const int FO_Name = 48;       // up to 16 ASCII chars (clip name), NUL padded
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -125,14 +129,18 @@ namespace HornetPassthrough
         }
 
         // ---- Frame ----
-        /// <summary>Publish a frame (Silksong side). pixels is RGBA32, top-down.</summary>
+        /// <summary>Publish a frame (Silksong side). pixels is RGBA32, bottom-up (Unity order).</summary>
         public void WriteFrame(byte[] pixels, int width, int height, float pivotX, float pivotY,
             float worldX, float worldY, int clipHash)
         {
             int seq = ReadInt(Proto.FrameMetaOffset + Proto.FO_Seq);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_Seq, seq + 1); // odd = writing
-            int n = System.Math.Min(pixels.Length, Proto.PixelsSize);
-            _view.WriteArray(Proto.PixelsOffset, pixels, 0, n);
+            if (pixels != null)
+            {
+                int n = System.Math.Min(pixels.Length, Proto.PixelsSize);
+                _view.WriteArray(Proto.PixelsOffset, pixels, 0, n);
+            }
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_HasPixels, pixels != null ? 1 : 0);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_Width, width);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_Height, height);
             WriteFloat(Proto.FrameMetaOffset + Proto.FO_PivotX, pivotX);
@@ -142,6 +150,54 @@ namespace HornetPassthrough
             WriteInt(Proto.FrameMetaOffset + Proto.FO_ClipHash, clipHash);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_FrameId, ReadInt(Proto.FrameMetaOffset + Proto.FO_FrameId) + 1);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_Seq, seq + 2); // even = stable
+        }
+
+        /// <summary>Publish Hornet's live animator state (Silksong side). name up to 15 chars.</summary>
+        public void WriteLive(string clipName, int frameIndex, int facing, int frameId)
+        {
+            int seq = ReadInt(Proto.FrameMetaOffset + Proto.FO_Seq);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_Seq, seq + 1);
+            WriteName(clipName);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_FrameIndex, frameIndex);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_Facing, facing);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_HasPixels, 0);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_FrameId, frameId);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_Seq, seq + 2);
+        }
+
+        public void ReadLive(out string clipName, out int frameIndex, out int facing, out int frameId,
+            out bool hasPixels)
+        {
+            clipName = ReadName();
+            frameIndex = ReadInt(Proto.FrameMetaOffset + Proto.FO_FrameIndex);
+            facing = ReadInt(Proto.FrameMetaOffset + Proto.FO_Facing);
+            frameId = ReadInt(Proto.FrameMetaOffset + Proto.FO_FrameId);
+            hasPixels = ReadInt(Proto.FrameMetaOffset + Proto.FO_HasPixels) != 0;
+        }
+
+        private void WriteName(string name)
+        {
+            var buf = new byte[16];
+            if (!string.IsNullOrEmpty(name))
+            {
+                for (int i = 0; i < buf.Length - 1 && i < name.Length; i++)
+                {
+                    buf[i] = (byte)name[i];
+                }
+            }
+            _view.WriteArray(Proto.FrameMetaOffset + Proto.FO_Name, buf, 0, buf.Length);
+        }
+
+        private string ReadName()
+        {
+            var buf = new byte[16];
+            _view.ReadArray(Proto.FrameMetaOffset + Proto.FO_Name, buf, 0, buf.Length);
+            int len = 0;
+            while (len < buf.Length && buf[len] != 0)
+            {
+                len++;
+            }
+            return System.Text.Encoding.ASCII.GetString(buf, 0, len);
         }
 
         /// <summary>Read the latest frame if it changed (CU side). Returns true when updated.</summary>
