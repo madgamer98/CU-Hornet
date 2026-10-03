@@ -64,7 +64,9 @@ namespace HornetExporter
                 Commit(ha.Jump, b, Proto.BtnJump, updateTick, deltaTime);
                 Commit(ha.Attack, b, Proto.BtnAttack, updateTick, deltaTime);
                 Commit(ha.Dash, b, Proto.BtnDash, updateTick, deltaTime);
-                Commit(ha.QuickCast, b, Proto.BtnNeedle, updateTick, deltaTime);
+                // Hornet's needle/harpoon throw is the SuperDash action in Silksong (QuickCast is the
+                // tool/spell button and produced an "AirSphere Attack" instead).
+                Commit(ha.SuperDash, b, Proto.BtnNeedle, updateTick, deltaTime);
             }
 
             private static void Commit(PlayerAction action, int buttons, int bit, ulong updateTick, float deltaTime)

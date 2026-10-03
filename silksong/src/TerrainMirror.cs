@@ -22,6 +22,7 @@ namespace HornetExporter
 
         private static readonly float[] Rects = new float[Proto.MaxRects * 4];
         private static readonly List<Collider2D> Disabled = new List<Collider2D>();
+        private static readonly List<BoxCollider2D> Pool = new List<BoxCollider2D>();
         private static GameObject _root;
         private static Vector2 _cuOrigin;
         private static Vector2 _silkOrigin;
@@ -42,6 +43,7 @@ namespace HornetExporter
                 }
             }
             Disabled.Clear();
+            Pool.Clear();
             if (_root != null)
             {
                 UnityEngine.Object.Destroy(_root);
@@ -174,27 +176,40 @@ namespace HornetExporter
             {
                 return;
             }
-            for (int i = _root.transform.childCount - 1; i >= 0; i--)
-            {
-                UnityEngine.Object.Destroy(_root.transform.GetChild(i).gameObject);
-            }
+            EnsurePool(count);
             for (int i = 0; i < count; i++)
             {
                 float rx = Rects[i * 4 + 0], ry = Rects[i * 4 + 1];
                 float rw = Rects[i * 4 + 2], rh = Rects[i * 4 + 3];
+                BoxCollider2D box = Pool[i];
                 if (rw <= 0f || rh <= 0f)
                 {
+                    box.gameObject.SetActive(false);
                     continue;
                 }
-                var go = new GameObject("cu" + i);
-                go.layer = TerrainLayer;
-                go.transform.SetParent(_root.transform, false);
-                go.transform.position = new Vector3(
+                box.gameObject.SetActive(true);
+                box.transform.position = new Vector3(
                     _silkOrigin.x + (rx + rw * 0.5f - _cuOrigin.x) * _k,
                     _silkOrigin.y + (ry + rh * 0.5f - _cuOrigin.y) * _k,
                     0f);
-                BoxCollider2D box = go.AddComponent<BoxCollider2D>();
                 box.size = new Vector2(rw * _k, rh * _k);
+            }
+            for (int i = count; i < Pool.Count; i++)
+            {
+                Pool[i].gameObject.SetActive(false);
+            }
+            // Make the new geometry visible to physics this step, so there is never a gap.
+            Physics2D.SyncTransforms();
+        }
+
+        private static void EnsurePool(int count)
+        {
+            while (Pool.Count < count)
+            {
+                var go = new GameObject("cu" + Pool.Count);
+                go.layer = TerrainLayer;
+                go.transform.SetParent(_root.transform, false);
+                Pool.Add(go.AddComponent<BoxCollider2D>());
             }
         }
 

@@ -398,3 +398,26 @@ Protocol bumped to `Version = 4`; adds a `PlayerState` region (Silksong -> CU) c
   long run eventually leaves CU's actual floor and the proxy correctly disappears.
 - **Next (S3):** merge proxy rects (kill seams), widen/stream terrain more smoothly, add a watchdog
   (Silksong gone → auto-unpuppet), then test dash/jump/wall/needle against CU geometry and the showcase.
+
+## S3 — seams, watchdogs, moveset (2026-10-03, VERIFIED; showcase skipped)
+- **Seams:** CU inflates every terrain rect by 0.1 CU units (`margin`) so adjacent colliders overlap and
+  no sub-pixel seam can drop her. Silksong no longer destroys/recreates proxy objects each rebuild — it
+  keeps a `BoxCollider2D` pool, toggles/repositions them, and calls `Physics2D.SyncTransforms()`.
+  Verified: a 2 s run is clean `Turn → Idle To Run → Run …` with `vel.y = 0` throughout (the earlier
+  `Land To Run` flapping is gone).
+- **Watchdogs (both directions):**
+  - CU: `active` from Silksong is honored only while `SilkAlive(1000)`; otherwise the puppet is released
+    (and stays released — the first cut re-puppeted from the stale `active` flag). Verified by killing
+    Silksong: `Silksong inactive/heartbeat lost; releasing puppet` → `S2 puppet disabled`, no re-enable.
+  - Silksong: if `!HostAlive(1500)` while the mirror is active, it restores vanilla terrain. Verified by
+    killing CU: `host heartbeat lost; restoring vanilla terrain` → `restored vanilla terrain`.
+- **Moveset against CU geometry:** the moves are Silksong's real controller, reached via forwarded input.
+  - Jump: `Double Jump`/`Land`. Dash (K): moved `39.8 → 43.6`, `Dash To Idle`.
+  - Slash (CU attack = Mouse0): `in=0x120`, `SlashAlt`.
+  - Needle/harpoon (L): **corrected mapping** — `QuickCast` is the tool/spell (gave `AirSphere Attack`);
+    Silksong's needle/harpoon is `SuperDash` (`HarpoonDash`). Now `in=0x180` → `Harpoon Catch`, dash-ran
+    `20.3 → 30.6`.
+  - Not yet exercised: wall cling/jump and pogo — the CU sandbox has no suitable walls/enemies, and
+    enemies aren't mirrored yet.
+- **Next:** mirrors only static `Ground` geometry; to get wall/pogo gameplay we'd mirror more layers and
+  entities. Otherwise the milestone set is done (showcase intentionally skipped).

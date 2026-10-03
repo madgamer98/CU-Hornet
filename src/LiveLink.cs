@@ -96,7 +96,10 @@ namespace HornetInCasualties
             bool hgrounded, hactive;
             if (_link.ReadPlayerState(out hx, out hy, out hvx, out hvy, out hfacing, out hgrounded, out hactive))
             {
-                if (hactive)
+                // Honor "active" only while Silksong is actually heartbeating; otherwise a stale
+                // active flag would re-puppet CU after the guest is gone.
+                bool live = hactive && _link.SilkAlive(1000);
+                if (live)
                 {
                     if (!Puppeting)
                     {
@@ -106,6 +109,7 @@ namespace HornetInCasualties
                 }
                 else if (Puppeting)
                 {
+                    Plugin.Log.LogWarning("LiveLink: Silksong inactive/heartbeat lost; releasing puppet.");
                     DisablePuppet();
                 }
             }
@@ -275,10 +279,12 @@ namespace HornetInCasualties
                     continue;
                 }
                 Bounds b = c.bounds;
-                float x0 = Mathf.Max(b.min.x, minX);
-                float y0 = Mathf.Max(b.min.y, minY);
-                float x1 = Mathf.Min(b.max.x, maxX);
-                float y1 = Mathf.Min(b.max.y, maxY);
+                // Inflate so adjacent tiles overlap — a sub-pixel seam must never drop her.
+                const float margin = 0.1f;
+                float x0 = Mathf.Max(b.min.x, minX) - margin;
+                float y0 = Mathf.Max(b.min.y, minY) - margin;
+                float x1 = Mathf.Min(b.max.x, maxX) + margin;
+                float y1 = Mathf.Min(b.max.y, maxY) + margin;
                 if (x1 <= x0 || y1 <= y0)
                 {
                     continue;

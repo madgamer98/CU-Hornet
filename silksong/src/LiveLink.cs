@@ -77,6 +77,11 @@ namespace HornetExporter
             // S2: refresh the terrain proxy from the host window, then publish Hornet's state mapped
             // back into CU coordinates so the host can puppet its body/camera to her.
             TerrainMirror.Poll(_link);
+            if (TerrainMirror.Active && !_link.HostAlive(1500))
+            {
+                Plugin.Log.LogWarning("LiveLink: host heartbeat lost; restoring vanilla terrain.");
+                TerrainMirror.Restore();
+            }
             float cuX, cuY;
             bool active = TerrainMirror.TryMapToCu(hero.transform.position, out cuX, out cuY);
             Vector2 hv = _rb != null ? _rb.linearVelocity : Vector2.zero;

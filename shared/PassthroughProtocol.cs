@@ -419,6 +419,13 @@ namespace HornetPassthrough
             return hb > 0 && (now - hb) < withinMs;
         }
 
+        public bool HostAlive(int withinMs = 1500)
+        {
+            long hb = ReadLong(Proto.HeaderOffset + Proto.HO_CuHeartbeat);
+            long now = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
+            return hb > 0 && (now - hb) < withinMs;
+        }
+
         private void WriteInt(int at, int v) { _view.Write(at, v); }
         private int ReadInt(int at) { return _view.ReadInt32(at); }
         private void WriteLong(int at, long v) { _view.Write(at, v); }
