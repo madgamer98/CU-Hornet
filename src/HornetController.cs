@@ -23,6 +23,9 @@ namespace HornetInCasualties
         private bool _slashHit;
         private string _slashClip;
 
+        private HornetNeedle _needle;
+        private float _needleReady;
+
         public void Init(HornetAvatar avatar, Body body)
         {
             _avatar = avatar;
@@ -40,6 +43,30 @@ namespace HornetInCasualties
             float now = Time.time;
             HandleDash(now);
             HandleSlash(now);
+            HandleNeedle(now);
+        }
+
+        private void HandleNeedle(float now)
+        {
+            if (_needle != null)
+            {
+                return;
+            }
+            if (!Input.GetKeyDown(Plugin.KeyNeedle.Value.MainKey) || now < _needleReady)
+            {
+                return;
+            }
+            _avatar.PlayAction("NeedleThrow Throwing", 0.4f);
+            _needle = HornetNeedle.Spawn(_body, _avatar.FacingRight, this);
+            _needleReady = now + Plugin.NeedleCooldown.Value;
+            Plugin.Log.LogInfo("move: needle throw");
+        }
+
+        public void OnNeedleCaught()
+        {
+            _needle = null;
+            _avatar.PlayAction("NeedleThrow Catch", 0.3f);
+            Plugin.Log.LogInfo("move: needle caught");
         }
 
         private void HandleDash(float now)

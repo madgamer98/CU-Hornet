@@ -39,6 +39,11 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> SlashActive;
         internal static ConfigEntry<float> SlashCooldown;
         internal static ConfigEntry<float> PogoSpeed;
+        internal static ConfigEntry<float> NeedleDamage;
+        internal static ConfigEntry<float> NeedleSpeed;
+        internal static ConfigEntry<float> NeedleReturnSpeed;
+        internal static ConfigEntry<float> NeedleRange;
+        internal static ConfigEntry<float> NeedleCooldown;
 
         private Harmony _harmony;
 
@@ -62,7 +67,7 @@ namespace HornetInCasualties
             KeyNeedle = Config.Bind("Moves", "KeyNeedle", new KeyboardShortcut(KeyCode.L), "Throw the needle.");
             KeyBind = Config.Bind("Moves", "KeyBind", new KeyboardShortcut(KeyCode.H), "Bind (heal).");
             DashSpeed = Config.Bind("Moves", "DashSpeed", 14f, "Dash horizontal speed.");
-            DashDuration = Config.Bind("Moves", "DashDuration", 0.18f, "Dash duration (s).");
+            DashDuration = Config.Bind("Moves", "DashDuration", 0.55f, "Dash duration (s).");
             DashCooldown = Config.Bind("Moves", "DashCooldown", 0.55f, "Dash cooldown (s).");
             SlashDamage = Config.Bind("Moves", "SlashDamage", 12f, "Slash damage.");
             SlashRange = Config.Bind("Moves", "SlashRange", 2.2f, "Slash hitbox size.");
@@ -70,6 +75,11 @@ namespace HornetInCasualties
             SlashActive = Config.Bind("Moves", "SlashActive", 0.10f, "When in the clip the hit lands (s before the end).");
             SlashCooldown = Config.Bind("Moves", "SlashCooldown", 0.12f, "Slash cooldown (s).");
             PogoSpeed = Config.Bind("Moves", "PogoSpeed", 13f, "Upward speed of a pogo bounce.");
+            NeedleDamage = Config.Bind("Moves", "NeedleDamage", 10f, "Thrown needle damage.");
+            NeedleSpeed = Config.Bind("Moves", "NeedleSpeed", 26f, "Thrown needle speed.");
+            NeedleReturnSpeed = Config.Bind("Moves", "NeedleReturnSpeed", 32f, "Needle return speed.");
+            NeedleRange = Config.Bind("Moves", "NeedleRange", 9f, "Distance before the needle returns.");
+            NeedleCooldown = Config.Bind("Moves", "NeedleCooldown", 0.35f, "Needle throw cooldown (s).");
 
             _harmony = new Harmony(Guid);
             _harmony.PatchAll();

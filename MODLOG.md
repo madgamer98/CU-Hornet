@@ -216,7 +216,19 @@ driving it headless is the full SkyCraft build.
 - **CU note:** `Body.Attack` is CU's own attack (raycast → BuildingEntity). Hornet moves are additive on
   new keys so CU gameplay isn't broken yet.
 
+## Moveset feedback round (2026-10-02)
+- **Facing fixed:** was always right because it used `Body.isRight`. Now tracked from `Body.moveDir.x`
+  and applied with `SpriteRenderer.flipX` (localScale stays positive). Verified moving left.
+- **Dash ~3x longer:** `DashDuration` 0.18 → 0.55.
+- **Needle throw (boomerang):** `src/HornetNeedle.cs` — flies out, damages on contact, stops at
+  terrain/range, returns to Hornet, she catches it. Mirrors Silksong's NeedleThrow. Procedural needle
+  sprite for now (should be replaced with Silksong's needle art). Verified: log `move: needle throw`,
+  `move: needle caught`.
+- Keys kept J (slash) / K (dash) / L (needle) / H (bind, not implemented yet).
+- Added NeedleThrow/Harpoon clips to the baker's list (need a re-bake to have their animations).
+
 ## Next
-- Implement needle throw + bind; wall cling/slide; double jump; verify pogo.
-- Tune Scale/Offset; un-premultiply capture color; bake effect clips.
+- Re-bake (Silksong restart) to get NeedleThrow/Harpoon animations + effect clips; bake the needle art.
+- Bind/heal, wall cling/slide/jump, double jump; verify pogo.
+- Un-premultiply capture color; tune scale/offset.
 - Optional: live state link.

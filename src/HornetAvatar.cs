@@ -16,6 +16,12 @@ namespace HornetInCasualties
         private HornetAnimator _animator;
         private string _actionClip;
         private float _actionUntil;
+        private bool _facingRight = true;
+
+        public bool FacingRight
+        {
+            get { return _facingRight; }
+        }
 
         /// <summary>Play a one-shot action clip (slash, dash, ...) then return to locomotion.</summary>
         public void PlayAction(string name, float duration)
@@ -109,8 +115,19 @@ namespace HornetInCasualties
                 p.y + Plugin.AvatarOffsetY.Value * scale,
                 p.z - 0.02f);
             _sprite.rotation = Quaternion.identity;
-            float sx = _body.isRight ? scale : -scale;
-            _sprite.localScale = new Vector3(sx, scale, 1f);
+            _sprite.localScale = new Vector3(scale, scale, 1f);
+
+            // Face the direction she's moving (keep the last facing when idle).
+            float mx = _body.moveDir.x;
+            if (mx > 0.01f)
+            {
+                _facingRight = true;
+            }
+            else if (mx < -0.01f)
+            {
+                _facingRight = false;
+            }
+            _renderer.flipX = !_facingRight;
 
             if (HornetSprites.Ready)
             {
