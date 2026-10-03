@@ -73,6 +73,8 @@ namespace HornetInCasualties
             if (Input.GetKey(KeyCode.S)) flags |= Proto.FlagDown;
 
             _link.WriteCuState(p.x, p.y, vx, vy, _body.isRight ? 1 : -1, Grounded(vy), flags);
+            // S0: forward the host's raw buttons so Silksong's own controller reacts to them.
+            _link.WriteInput(ReadButtons());
 
             int w, h, fid;
             float px, py, wx, wy;
@@ -120,6 +122,24 @@ namespace HornetInCasualties
         }
 
         private float _lastGroundedTime;
+
+        /// <summary>
+        /// Read the host's real binds into the wire bitfield. Movement/jump/attack use CU's own
+        /// keybinds (so remaps are respected); dash/needle reuse the passthrough action keys.
+        /// </summary>
+        private int ReadButtons()
+        {
+            int b = Proto.BtnEnabled;
+            if (Input.GetKey(KeyBinds.GetBind("left"))) b |= Proto.BtnLeft;
+            if (Input.GetKey(KeyBinds.GetBind("right"))) b |= Proto.BtnRight;
+            if (Input.GetKey(KeyBinds.GetBind("up"))) b |= Proto.BtnUp;
+            if (Input.GetKey(KeyBinds.GetBind("down"))) b |= Proto.BtnDown;
+            if (Input.GetKey(KeyBinds.GetBind("jump"))) b |= Proto.BtnJump;
+            if (Input.GetKey(KeyBinds.GetBind("attack"))) b |= Proto.BtnAttack;
+            if (Input.GetKey(Plugin.KeyDash.Value.MainKey)) b |= Proto.BtnDash;
+            if (Input.GetKey(Plugin.KeyNeedle.Value.MainKey)) b |= Proto.BtnNeedle;
+            return b;
+        }
 
         // Hide the vanilla experiment's sprites the same way the baked port did.
         private void HideVanillaBody()

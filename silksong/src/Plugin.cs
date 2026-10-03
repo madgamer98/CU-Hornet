@@ -17,7 +17,7 @@ namespace HornetExporter
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "dev.cuhornet.silksong.exporter";
-        public const string Version = "0.0.5";
+        public const string Version = "0.0.6";
 
         internal static ManualLogSource Log;
         private Harmony _harmony;

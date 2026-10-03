@@ -6,15 +6,16 @@ namespace HornetPassthrough
     /// <summary>
     /// Shared-memory protocol between Casualties: Unknown (host) and Hollow Knight: Silksong
     /// (Hornet source). One named mapping, single writer per region:
-    ///   CU    writes CuState   (its player state)          and reads the frame
-    ///   Silk  writes Frame     (Hornet RGBA + pivot)        and reads CuState
-    /// A sequence counter guards the frame against tearing.
+    ///   CU    writes CuState + Input (its player state / raw buttons) and reads the frame
+    ///   Silk  writes Frame (Hornet RGBA + pivot)                     and reads CuState + Input
+    /// A sequence counter guards the frame against tearing. The Input region carries the host's
+    /// raw buttons so Silksong's real controller can be driven by them (S0: input round-trip).
     /// </summary>
     public static class Proto
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 1;
+        public const int Version = 2;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -26,7 +27,20 @@ namespace HornetPassthrough
         public const int MaxWidth = 384;
         public const int MaxHeight = 384;
         public const int PixelsSize = MaxWidth * MaxHeight * 4;
-        public const long MappingSize = PixelsOffset + PixelsSize;
+        public const int InputOffset = PixelsOffset + PixelsSize;
+        public const int InputSize = 32;
+        public const long MappingSize = InputOffset + InputSize;
+
+        // Raw button bits (Input region, CU -> Silksong). Mirrors the host's real binds.
+        public const int BtnLeft = 1 << 0;
+        public const int BtnRight = 1 << 1;
+        public const int BtnUp = 1 << 2;
+        public const int BtnDown = 1 << 3;
+        public const int BtnJump = 1 << 4;
+        public const int BtnAttack = 1 << 5;
+        public const int BtnDash = 1 << 6;
+        public const int BtnNeedle = 1 << 7; // Hornet's ranged/cast action
+        public const int BtnEnabled = 1 << 8; // host is actively forwarding input
 
         // Header fields
         public const int HO_Magic = 0;
@@ -67,6 +81,10 @@ namespace HornetPassthrough
         public const int FO_Facing = 40;     // +1 right, -1 left
         public const int FO_HasPixels = 44;  // 1 when the pixel buffer is valid
         public const int FO_Name = 48;       // up to 16 ASCII chars (clip name), NUL padded
+
+        // Input (CU -> Silksong): raw buttons + a small sequence counter.
+        public const int IO_Buttons = 0;     // int bitfield of Btn* above
+        public const int IO_Seq = 4;         // int, odd while writing
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -134,6 +152,29 @@ namespace HornetPassthrough
             facing = ReadInt(Proto.CuStateOffset + Proto.CO_Facing);
             grounded = ReadInt(Proto.CuStateOffset + Proto.CO_Grounded) != 0;
             flags = ReadInt(Proto.CuStateOffset + Proto.CO_Flags);
+        }
+
+        // ---- Input (CU -> Silksong) ----
+        /// <summary>Publish the host's raw button bitfield.</summary>
+        public void WriteInput(int buttons)
+        {
+            int seq = ReadInt(Proto.InputOffset + Proto.IO_Seq);
+            WriteInt(Proto.InputOffset + Proto.IO_Seq, seq + 1); // odd = writing
+            WriteInt(Proto.InputOffset + Proto.IO_Buttons, buttons);
+            WriteInt(Proto.InputOffset + Proto.IO_Seq, seq + 2); // even = stable
+        }
+
+        /// <summary>Read the host's raw button bitfield.</summary>
+        public int ReadInput()
+        {
+            int seq1 = ReadInt(Proto.InputOffset + Proto.IO_Seq);
+            if ((seq1 & 1) != 0)
+            {
+                return 0; // writer mid-publish; caller retries next frame
+            }
+            int buttons = ReadInt(Proto.InputOffset + Proto.IO_Buttons);
+            int seq2 = ReadInt(Proto.InputOffset + Proto.IO_Seq);
+            return seq1 == seq2 ? buttons : 0;
         }
 
         // ---- Frame ----

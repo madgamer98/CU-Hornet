@@ -293,3 +293,53 @@ Both games run at once and exchange state over shared memory `Local\HornetPassth
 - Bind/heal; verify pogo/double jump/wall in game.
 - Un-premultiply capture color; tune scale/offset.
 - Optional: live state link.
+
+## Authority inversion — M1 (2026-10-03, new session)
+Human decision: invert the authority. **Silksong becomes the character controller** (real input →
+moveset → physics → animation); **CU becomes the environment + renderer** (feeds collision, keeps
+drawing everything, and composites Hornet's frames). This is the "true live link" that the earlier
+Stage-2 notes deferred. Chosen shape **M1 = Silksong simulates against a mirrored world**, not M2
+(CU integrates Silksong's intent).
+- Plan: CU streams local collision geometry around Hornet → Silksong builds proxy colliders → real
+  `HeroController`/`HeroBox` runs against them → Hornet's position returns → CU puppets `Body`/camera
+  and renders. Scale via one factor `k` (world units per CU unit); tune once to Hornet's jump/dash.
+- Hard parts (recorded): input injection; geometry mirror on the exact layers `HeroBox`/`Helper.Raycast2D`
+  query; scene/layer isolation from Silksong's real level; CU ragdoll must be puppeted (skip
+  `Body.FixedUpdate`); ~1 frame round-trip latency; dynamic world/enemies later.
+- Staging: **S0 input round-trip** → S1 terrain mirror (stand on CU's floor at the right scale) →
+  S2 return trip (CU puppets to Hornet) → S3 harden + moveset.
+
+## S0 — input round-trip (2026-10-03, VERIFIED)
+Built and deployed both plugins; protocol bumped to `Version = 2`.
+- **Protocol:** new `Input` region (after pixels) carrying the host's raw button bitfield
+  (`BtnLeft/Right/Up/Down/Jump/Attack/Dash/Needle`), seqlock-guarded. CU writes it; Silksong reads it.
+- **CU (`src/LiveLink.cs`):** `ReadButtons()` reads CU's own keybinds (`KeyBinds.GetBind("left"/...)`)
+  plus the passthrough dash/needle keys, and `WriteInput`s them each `LateUpdate`. `CuState` still published.
+- **Silksong (`silksong/src/LiveLink.cs`):** no longer replays clips/facing from CU's velocity. It reads
+  the Input region into `LiveLink.InjectedButtons` and still captures/publishes Hornet's frame. Logs her
+  own `clip`/`vel`/`pos`/`in` every 30 frames for verification.
+- **Silksong (`silksong/src/InputInjector.cs`):** Harmony patches.
+  - prefix on `InputManager.UpdateInternal`: sets `SuspendInBackground = false` so InControl keeps
+    ticking while the host game is focused.
+  - postfix on `PlayerActionSet.Update`: for the `HeroActions` set, asserts the host's pressed buttons
+    into `Left/Right/Up/Down/Jump/Attack/Dash/QuickCast` via `PlayerAction.CommitWithValue`.
+- **Two bugs found and fixed during verification:**
+  1. *Destructive injection:* committing `0` for host-released buttons overrode Silksong's real keyboard,
+     breaking its own menus. Injection is now **additive** (only assert presses; releases fall through to
+     the real device).
+  2. *`MoveVector` never saw host directions:* the set derives `MoveVector` from `Left/Right/Up/Down`
+     *before* the postfix runs, so `HeroController`'s horizontal speed stayed 0 (Hornet stood up but
+     wouldn't run). The postfix now re-invokes `PlayerTwoAxisAction.Update` via `AccessTools` after
+     asserting the directions.
+- **Verified in the real games (taskbar restarted both; profiles loaded):**
+  - CU sandbox → hold **D**: Silksong log `in=0x102 clip=Turn vel=(8.3,0.0)`, Hornet ran `pos 17.0 → 39.6`
+    and splashed into a pond. Hold **Space**: `in=0x110`, `Double Jump`/`Umbrella Float`.
+  - CU log `LiveLink diag: fid=8146 w=210 hasPx=1 silkAlive=True` — frames still stream back and CU
+    composites her (screenshot `%TEMP%\s0_cu_running*.png`, `s0_ss_running*.png`).
+- **Gotcha:** during the first pass we saw spurious-looking Left/Jump/Attack/Down bits; those turned out
+  to be the human's own keypresses landing in CU (which held focus) and being forwarded — i.e. the feature
+  working, not an artifact. A clean single-key retest (D only) showed exactly `in=0x102`. For `um win drive`
+  on CU's legacy-`Input` binds, plain VKs work; `scanmode` was only needed once to click through the content
+  warning (it sends scan-code-only events, so prefer plain VKs for anything gameplay reads).
+- **S0 leaves CU still simulating its own ragdoll** (input is duplicated), which is expected — puppeting
+  CU to Hornet is S2.

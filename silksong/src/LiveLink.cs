@@ -4,22 +4,23 @@ using UnityEngine;
 namespace HornetExporter
 {
     /// <summary>
-    /// Live passthrough (Silksong side). Maps the host player's state/actions onto Hornet's animator
-    /// and publishes her isolated frame. Actions come from the host's flag bits (rising edges).
+    /// Live passthrough (Silksong side), S0: input round-trip.
+    /// The host's raw buttons are read from shared memory and injected into Hornet's real
+    /// InControl actions (see <see cref="InputInjector"/>), so her own controller moves her.
+    /// We no longer replay clips from the host's velocity. Her isolated frame is still published
+    /// to the host for display.
     /// </summary>
     public class LiveLink : MonoBehaviour
     {
+        /// <summary>Latest button bitfield from the host; consumed by InputInjector.</summary>
+        public static int InjectedButtons;
+
         private PassthroughLink _link;
         private tk2dSpriteAnimator _anim;
-
+        private Rigidbody2D _rb;
         private int _lastClipHash;
-        private int _publishTick;
         private bool _capLogged;
-
-        private bool _prevAttack, _prevDash, _prevNeedle;
-        private string _clip = "Idle";
-        private float _actionUntil;
-        private int _lastFacing = 1;
+        private int _stateTick;
 
         private void Awake()
         {
@@ -52,10 +53,7 @@ namespace HornetExporter
             }
 
             _link.Heartbeat();
-            float x, y, vx, vy;
-            int facing, flags;
-            bool grounded;
-            _link.ReadCuState(out x, out y, out vx, out vy, out facing, out grounded, out flags);
+            InjectedButtons = _link.ReadInput();
 
             HeroController hero = HeroController.instance;
             if (hero == null)
@@ -66,77 +64,23 @@ namespace HornetExporter
             {
                 _anim = hero.GetComponentInChildren<tk2dSpriteAnimator>();
             }
-
-            bool attack = (flags & Proto.FlagAttack) != 0;
-            bool dash = (flags & Proto.FlagDash) != 0;
-            bool needle = (flags & Proto.FlagNeedle) != 0;
-            bool up = (flags & Proto.FlagUp) != 0;
-            bool down = (flags & Proto.FlagDown) != 0;
-            bool attackEdge = attack && !_prevAttack;
-            bool dashEdge = dash && !_prevDash;
-            bool needleEdge = needle && !_prevNeedle;
-            _prevAttack = attack;
-            _prevDash = dash;
-            _prevNeedle = needle;
-
-            float speed = 1f;
-            if (attackEdge)
+            if (_rb == null)
             {
-                _clip = up ? "UpSlash" : (down && !grounded ? "DownSpike" : "Slash");
-                _actionUntil = Time.time + 0.30f;
-            }
-            else if (dashEdge)
-            {
-                _clip = "Dash";
-                _actionUntil = Time.time + 0.40f;
-            }
-            else if (needleEdge)
-            {
-                _clip = "NeedleThrow Throwing";
-                _actionUntil = Time.time + 0.40f;
-            }
-            else if (Time.time >= _actionUntil)
-            {
-                if (!grounded)
-                {
-                    _clip = vy > 1f ? "Airborne" : "Fall";
-                }
-                else
-                {
-                    float ax = Mathf.Abs(vx);
-                    _clip = ax > 0.5f ? "Run" : "Idle";
-                    if (ax > 0.5f)
-                    {
-                        speed = Mathf.Clamp(ax / 7f, 0.7f, 2f);
-                    }
-                }
+                _rb = hero.GetComponent<Rigidbody2D>();
             }
 
-            if (_anim != null)
+            // Diagnostics: log Hornet's own clip + velocity so we can prove input reached her.
+            _stateTick++;
+            if (_stateTick % 30 == 0)
             {
-                int hash = _clip.GetHashCode();
-                if (hash != _lastClipHash)
-                {
-                    _anim.Play(_clip);
-                    _lastClipHash = hash;
-                    Plugin.Log.LogInfo("LiveLink: clip " + _clip);
-                }
-                if (_anim.CurrentClip != null)
-                {
-                    _anim.ClipFps = _anim.CurrentClip.fps * speed;
-                }
+                string clip = _anim != null && _anim.CurrentClip != null ? _anim.CurrentClip.name : "?";
+                Vector2 v = _rb != null ? _rb.linearVelocity : Vector2.zero;
+                Plugin.Log.LogInfo("LiveLink state: clip=" + clip + " vel=(" + v.x.ToString("0.0") +
+                                   "," + v.y.ToString("0.0") + ") pos=" + hero.transform.position.x.ToString("0.0") +
+                                   " in=0x" + InjectedButtons.ToString("X"));
             }
 
-            // Flip Hornet to match the host's facing.
-            if (facing != 0 && facing != _lastFacing)
-            {
-                _lastFacing = facing;
-                Vector3 s = hero.transform.localScale;
-                float mag = Mathf.Abs(s.x);
-                hero.transform.localScale = new Vector3(mag * (facing > 0 ? 1f : -1f), s.y, s.z);
-            }
-
-            // Publish the isolated frame (cached diff capture) every frame.
+            // Publish the isolated frame (cached main-camera diff) every frame.
             try
             {
                 byte[] rgba;
@@ -164,6 +108,7 @@ namespace HornetExporter
 
         private void OnDestroy()
         {
+            InjectedButtons = 0;
             _link?.Dispose();
         }
     }
