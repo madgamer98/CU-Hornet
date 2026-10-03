@@ -200,7 +200,23 @@ Human chose offline-first (option 1); keep the live state link as a fallback if 
   washed (pink-ish cloak). Un-premultiplying against the background frame would fix it.
 - Silksong plugin version 0.0.5.
 
+## Stage 2 — moveset (chosen: full Hornet moveset, real gameplay, built in CU)
+Decision: implement Hornet's moveset in CU (option 1). Live link judged **not** simpler: Silksong's
+`HeroController` can't run detached (PlayMaker FSMs, TeamCherry services, its own world/collision), so
+driving it headless is the full SkyCraft build.
+- **Slice 1 shipped:** `src/HornetController.cs` — Dash (velocity burst + cooldown + gravity off),
+  Slash forward / UpSlash (hold W) / DownSpike (hold S in air), and **pogo** (down-slash on an enemy/
+  terrain while airborne bounces up). Hits reuse CU's system: `BuildingEntity.health` + `AnimalHit`/
+  `BuildingHit`, `WorldGeneration.CreateDamageNumber`. `HornetAvatar.PlayAction` plays the clip once then
+  returns to locomotion. Config section `[Moves]` with keys (Slash=J, Dash=K, Needle=L, Bind=H) and
+  tuning values.
+- **Verified in the CU sandbox:** log shows `move: Slash`, `move: dash dir=1`.
+- **Untested/broken:** pogo bounce (not yet triggered in a test), needle throw and bind (keys reserved,
+  not implemented), effect clips empty, capture color washed.
+- **CU note:** `Body.Attack` is CU's own attack (raycast → BuildingEntity). Hornet moves are additive on
+  new keys so CU gameplay isn't broken yet.
+
 ## Next
-- Tune Scale/Offset for CU; fix capture color (un-premultiply); bake any missing clips.
-- Drive the moveset (Stage 2): map CU actions to Slash/Dash/NeedleThrow, etc.
+- Implement needle throw + bind; wall cling/slide; double jump; verify pogo.
+- Tune Scale/Offset; un-premultiply capture color; bake effect clips.
 - Optional: live state link.

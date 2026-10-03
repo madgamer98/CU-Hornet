@@ -14,6 +14,19 @@ namespace HornetInCasualties
         private Transform _sprite;
         private SpriteRenderer _renderer;
         private HornetAnimator _animator;
+        private string _actionClip;
+        private float _actionUntil;
+
+        /// <summary>Play a one-shot action clip (slash, dash, ...) then return to locomotion.</summary>
+        public void PlayAction(string name, float duration)
+        {
+            _actionClip = name;
+            _actionUntil = Time.time + duration;
+            if (_animator != null)
+            {
+                _animator.Play(name, true);
+            }
+        }
 
         public static HornetAvatar Ensure(Body body)
         {
@@ -64,6 +77,16 @@ namespace HornetInCasualties
             {
                 _renderer.sprite = PlaceholderSprite.Create();
             }
+
+            if (Plugin.EnableMoves.Value)
+            {
+                HornetController controller = body.gameObject.GetComponent<HornetController>();
+                if (controller == null)
+                {
+                    controller = body.gameObject.AddComponent<HornetController>();
+                }
+                controller.Init(this, body);
+            }
         }
 
         private void LateUpdate()
@@ -91,7 +114,15 @@ namespace HornetInCasualties
 
             if (HornetSprites.Ready)
             {
-                _animator.Play(ChooseClip());
+                if (!string.IsNullOrEmpty(_actionClip) && Time.time < _actionUntil)
+                {
+                    _animator.Play(_actionClip);
+                }
+                else
+                {
+                    _actionClip = null;
+                    _animator.Play(ChooseClip());
+                }
             }
 
             if (Plugin.HideVanillaBody.Value)

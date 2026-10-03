@@ -25,6 +25,20 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> AvatarOffsetX;
         internal static ConfigEntry<float> AvatarOffsetY;
         internal static ConfigEntry<float> AvatarPpu;
+        internal static ConfigEntry<bool> EnableMoves;
+        internal static ConfigEntry<KeyboardShortcut> KeySlash;
+        internal static ConfigEntry<KeyboardShortcut> KeyDash;
+        internal static ConfigEntry<KeyboardShortcut> KeyNeedle;
+        internal static ConfigEntry<KeyboardShortcut> KeyBind;
+        internal static ConfigEntry<float> DashSpeed;
+        internal static ConfigEntry<float> DashDuration;
+        internal static ConfigEntry<float> DashCooldown;
+        internal static ConfigEntry<float> SlashDamage;
+        internal static ConfigEntry<float> SlashRange;
+        internal static ConfigEntry<float> SlashReach;
+        internal static ConfigEntry<float> SlashActive;
+        internal static ConfigEntry<float> SlashCooldown;
+        internal static ConfigEntry<float> PogoSpeed;
 
         private Harmony _harmony;
 
@@ -41,6 +55,21 @@ namespace HornetInCasualties
             AvatarOffsetX = Config.Bind("Avatar", "OffsetX", 0f, "Hornet horizontal offset (in sprite units).");
             AvatarOffsetY = Config.Bind("Avatar", "OffsetY", 0f, "Hornet vertical offset (in sprite units).");
             AvatarPpu = Config.Bind("Avatar", "Ppu", 64f, "Pixels per unit for the baked Hornet frames.");
+
+            EnableMoves = Config.Bind("Moves", "EnableMoves", true, "Enable Hornet's moves (dash/slash/pogo).");
+            KeySlash = Config.Bind("Moves", "KeySlash", new KeyboardShortcut(KeyCode.J), "Slash (hold W = up, hold S in air = down/pogo).");
+            KeyDash = Config.Bind("Moves", "KeyDash", new KeyboardShortcut(KeyCode.K), "Dash.");
+            KeyNeedle = Config.Bind("Moves", "KeyNeedle", new KeyboardShortcut(KeyCode.L), "Throw the needle.");
+            KeyBind = Config.Bind("Moves", "KeyBind", new KeyboardShortcut(KeyCode.H), "Bind (heal).");
+            DashSpeed = Config.Bind("Moves", "DashSpeed", 14f, "Dash horizontal speed.");
+            DashDuration = Config.Bind("Moves", "DashDuration", 0.18f, "Dash duration (s).");
+            DashCooldown = Config.Bind("Moves", "DashCooldown", 0.55f, "Dash cooldown (s).");
+            SlashDamage = Config.Bind("Moves", "SlashDamage", 12f, "Slash damage.");
+            SlashRange = Config.Bind("Moves", "SlashRange", 2.2f, "Slash hitbox size.");
+            SlashReach = Config.Bind("Moves", "SlashReach", 1.4f, "How far in front the slash hits.");
+            SlashActive = Config.Bind("Moves", "SlashActive", 0.10f, "When in the clip the hit lands (s before the end).");
+            SlashCooldown = Config.Bind("Moves", "SlashCooldown", 0.12f, "Slash cooldown (s).");
+            PogoSpeed = Config.Bind("Moves", "PogoSpeed", 13f, "Upward speed of a pogo bounce.");
 
             _harmony = new Harmony(Guid);
             _harmony.PatchAll();
