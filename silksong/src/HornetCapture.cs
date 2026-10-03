@@ -13,7 +13,7 @@ namespace HornetExporter
     {
         private const int Pad = 110;
 
-        private const int CaptureLayer = 30;
+        private static int CaptureLayer = 31;
         private const int CapSize = 256;
         private static Camera _capCam;
         private static RenderTexture _capRt;
@@ -26,6 +26,17 @@ namespace HornetExporter
             {
                 return;
             }
+            // Prefer the highest layer that has no name (most likely unused), so the capture sees
+            // only Hornet.
+            for (int i = 31; i >= 8; i--)
+            {
+                if (string.IsNullOrEmpty(LayerMask.LayerToName(i)))
+                {
+                    CaptureLayer = i;
+                    break;
+                }
+            }
+            Plugin.Log.LogInfo("HornetCapture: using layer " + CaptureLayer);
             var go = new GameObject("HornetCaptureCam");
             Object.DontDestroyOnLoad(go);
             _capCam = go.AddComponent<Camera>();

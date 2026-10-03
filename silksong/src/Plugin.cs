@@ -41,6 +41,17 @@ namespace HornetExporter
             link.AddComponent<LiveLink>();
 
             Log.LogInfo("Hornet Exporter v" + Version + " loaded. Press F7 in gameplay to inspect Hornet.");
+
+            var layers = new StringBuilder("Layers: ");
+            for (int i = 0; i < 32; i++)
+            {
+                string n = LayerMask.LayerToName(i);
+                if (!string.IsNullOrEmpty(n))
+                {
+                    layers.Append(i).Append('=').Append(n).Append("  ");
+                }
+            }
+            Log.LogInfo(layers.ToString());
         }
 
         private void OnDestroy()
