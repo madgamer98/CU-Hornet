@@ -17,7 +17,7 @@ namespace HornetExporter
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "dev.cuhornet.silksong.exporter";
-        public const string Version = "0.0.6";
+        public const string Version = "0.0.7";
 
         internal static ManualLogSource Log;
         private Harmony _harmony;
@@ -83,6 +83,16 @@ namespace HornetExporter
             if (Input.GetKeyDown(KeyCode.F5))
             {
                 HornetCapture.Bake(DefaultClips);
+            }
+
+            if (Input.GetKeyDown(KeyCode.F4))
+            {
+                TerrainMirror.Apply();
+            }
+
+            if (Input.GetKeyDown(KeyCode.F3))
+            {
+                TerrainMirror.Restore();
             }
         }
 

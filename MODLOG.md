@@ -343,3 +343,28 @@ Built and deployed both plugins; protocol bumped to `Version = 2`.
   warning (it sends scan-code-only events, so prefer plain VKs for anything gameplay reads).
 - **S0 leaves CU still simulating its own ragdoll** (input is duplicated), which is expected — puppeting
   CU to Hornet is S2.
+
+## S1 — terrain mirror (2026-10-03, VERIFIED core)
+Protocol bumped to `Version = 3`; adds a `Terrain` region (CU -> Silksong): up to 256 ground AABBs
+relative to the CU player's ground contact, in CU units, plus the CU player collider height (scale
+reference), seqlock-guarded.
+- **CU (`src/LiveLink.cs`):** every 0.25 s, `PublishTerrain()` anchors at the ground under the player
+  (down-ray on the `Ground` mask, fallback to the collider's min.y), grabs `Ground`-layer colliders in a
+  ±96 CU-unit box, clips each to the window, and publishes relative `(x,y,w,h)` rects + player height.
+- **Silksong (`silksong/src/TerrainMirror.cs`), F4 = apply / F3 = restore:**
+  - Layer choice is the key: Silksong's ground checks and `HeroBox` use mask `0x2100` = layers **8
+    ("Terrain")** and 13 ("Hero Detector"), so proxy boxes are put on **layer 8** — no mask patches.
+  - Scale `k = HornetColliderHeight / CuPlayerColliderHeight` (measured: 2.08 / 5.0 = **0.416**).
+  - Anchor at Hornet's feet; boxes placed at `anchor + k*rect`; then teleport Hornet 3 units above the
+    floor and zero the rigidbody.
+  - Disables all existing layer-8/13 colliders (16 in Shellwood) so only the proxy can support her;
+    `Restore()` re-enables them and destroys the proxy.
+- **Verified:** F4 → `applied 8 boxes k=0.416 hornetH=2.08 cuH=5`. Hold D → Hornet ran `pos 20.3 → 42.1`
+  (~22 units) with `vel.y = 0.0` and `clip=Run` the whole way — i.e. she is standing on and traversing
+  CU's mirrored sandbox floor, with Silksong's own terrain disabled. `Restore` re-enables vanilla terrain.
+- **Known limits (expected for one-shot S1):** the proxy does not follow the CU player, so running past
+  the window edge (~±40 Silksong units) drops her; room-transition triggers in the real map still fire
+  (dark fade) when she crosses them; restoring removes the floor she's standing on, so she drops.
+- **Next (S2):** puppet CU's `Body`/camera to Hornet's mapped position, map absolute CU position to
+  Silksong (fixed origin + `k`), refresh the terrain window as the player moves, and stop CU's own
+  ragdoll/controller so input isn't duplicated.

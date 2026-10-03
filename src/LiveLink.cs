@@ -22,6 +22,12 @@ namespace HornetInCasualties
         private bool _loggedFrame;
         private int _diag;
 
+        private float _terrainTimer;
+        private int _terrainRev;
+        private readonly float[] _rectBuf = new float[Proto.MaxRects * 4];
+        private readonly Collider2D[] _overlapBuf = new Collider2D[Proto.MaxRects];
+        private static readonly int GroundMask = LayerMask.GetMask("Ground");
+
         public void Init(Body body)
         {
             _body = body;
@@ -75,6 +81,14 @@ namespace HornetInCasualties
             _link.WriteCuState(p.x, p.y, vx, vy, _body.isRight ? 1 : -1, Grounded(vy), flags);
             // S0: forward the host's raw buttons so Silksong's own controller reacts to them.
             _link.WriteInput(ReadButtons());
+
+            // S1: publish a local window of ground AABBs so Silksong can collide against CU's world.
+            _terrainTimer -= Time.deltaTime;
+            if (_terrainTimer <= 0f)
+            {
+                _terrainTimer = 0.25f;
+                PublishTerrain();
+            }
 
             int w, h, fid;
             float px, py, wx, wy;
@@ -139,6 +153,64 @@ namespace HornetInCasualties
             if (Input.GetKey(Plugin.KeyDash.Value.MainKey)) b |= Proto.BtnDash;
             if (Input.GetKey(Plugin.KeyNeedle.Value.MainKey)) b |= Proto.BtnNeedle;
             return b;
+        }
+
+        /// <summary>
+        /// Collect ground colliders around the player as AABBs relative to the player's ground
+        /// contact, in CU units, and publish them. Silksong scales them and builds a proxy.
+        /// </summary>
+        private void PublishTerrain()
+        {
+            if (_body == null || _body.col == null)
+            {
+                return;
+            }
+
+            Bounds cb = _body.col.bounds;
+            Vector2 center = cb.center;
+
+            // Anchor at the ground directly under the player so the floor maps to the proxy's y=0.
+            float anchorY = cb.min.y;
+            RaycastHit2D ground = Physics2D.Raycast(center, Vector2.down, cb.extents.y + 12f, GroundMask);
+            if (ground.collider != null)
+            {
+                anchorY = ground.point.y;
+            }
+            Vector2 anchor = new Vector2(center.x, anchorY);
+
+            const float half = 96f;
+            int n = Physics2D.OverlapBoxNonAlloc(anchor, new Vector2(half * 2f, half * 2f), 0f,
+                _overlapBuf, GroundMask);
+
+            float minX = anchor.x - half, minY = anchor.y - half;
+            float maxX = anchor.x + half, maxY = anchor.y + half;
+
+            int count = 0;
+            for (int i = 0; i < n && count < Proto.MaxRects; i++)
+            {
+                Collider2D c = _overlapBuf[i];
+                if (c == null)
+                {
+                    continue;
+                }
+                Bounds b = c.bounds;
+                float x0 = Mathf.Max(b.min.x, minX);
+                float y0 = Mathf.Max(b.min.y, minY);
+                float x1 = Mathf.Min(b.max.x, maxX);
+                float y1 = Mathf.Min(b.max.y, maxY);
+                if (x1 <= x0 || y1 <= y0)
+                {
+                    continue;
+                }
+                _rectBuf[count * 4 + 0] = x0 - anchor.x;
+                _rectBuf[count * 4 + 1] = y0 - anchor.y;
+                _rectBuf[count * 4 + 2] = x1 - x0;
+                _rectBuf[count * 4 + 3] = y1 - y0;
+                count++;
+            }
+
+            _terrainRev++;
+            _link.WriteTerrain(cb.size.y, _rectBuf, count, _terrainRev);
         }
 
         // Hide the vanilla experiment's sprites the same way the baked port did.

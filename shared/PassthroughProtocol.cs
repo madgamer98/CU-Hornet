@@ -15,7 +15,7 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 2;
+        public const int Version = 3;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -29,7 +29,12 @@ namespace HornetPassthrough
         public const int PixelsSize = MaxWidth * MaxHeight * 4;
         public const int InputOffset = PixelsOffset + PixelsSize;
         public const int InputSize = 32;
-        public const long MappingSize = InputOffset + InputSize;
+        public const int TerrainOffset = InputOffset + InputSize;
+        public const int TerrainHeaderSize = 16;
+        public const int MaxRects = 256;
+        public const int TerrainRectsOffset = TerrainOffset + TerrainHeaderSize;
+        public const int TerrainSize = TerrainHeaderSize + MaxRects * 16;
+        public const long MappingSize = TerrainOffset + TerrainSize;
 
         // Raw button bits (Input region, CU -> Silksong). Mirrors the host's real binds.
         public const int BtnLeft = 1 << 0;
@@ -85,6 +90,13 @@ namespace HornetPassthrough
         // Input (CU -> Silksong): raw buttons + a small sequence counter.
         public const int IO_Buttons = 0;     // int bitfield of Btn* above
         public const int IO_Seq = 4;         // int, odd while writing
+
+        // Terrain (CU -> Silksong): a window of ground AABBs relative to the CU player's ground
+        // contact, in CU world units. count rects at TerrainRectsOffset, each (x, y, w, h) float32.
+        public const int TH_Revision = 0;    // int, bumps when the window changes
+        public const int TH_Count = 4;
+        public const int TH_PlayerHeight = 8; // float, CU player collider height (scale reference)
+        public const int TH_Seq = 12;        // int seqlock
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -175,6 +187,65 @@ namespace HornetPassthrough
             int buttons = ReadInt(Proto.InputOffset + Proto.IO_Buttons);
             int seq2 = ReadInt(Proto.InputOffset + Proto.IO_Seq);
             return seq1 == seq2 ? buttons : 0;
+        }
+
+        // ---- Terrain (CU -> Silksong) ----
+        /// <summary>Publish ground AABBs relative to (anchorX, anchorY), in CU units. rects is x,y,w,h per item.</summary>
+        public void WriteTerrain(float playerHeight, float[] rects, int count, int revision)
+        {
+            int seq = ReadInt(Proto.TerrainOffset + Proto.TH_Seq);
+            WriteInt(Proto.TerrainOffset + Proto.TH_Seq, seq + 1);
+            WriteInt(Proto.TerrainOffset + Proto.TH_Revision, revision);
+            WriteInt(Proto.TerrainOffset + Proto.TH_Count, count);
+            WriteFloat(Proto.TerrainOffset + Proto.TH_PlayerHeight, playerHeight);
+
+            int n = System.Math.Min(count, Proto.MaxRects);
+            for (int i = 0; i < n; i++)
+            {
+                int at = Proto.TerrainRectsOffset + i * 16;
+                WriteFloat(at + 0, rects[i * 4 + 0]);
+                WriteFloat(at + 4, rects[i * 4 + 1]);
+                WriteFloat(at + 8, rects[i * 4 + 2]);
+                WriteFloat(at + 12, rects[i * 4 + 3]);
+            }
+            WriteInt(Proto.TerrainOffset + Proto.TH_Seq, seq + 2);
+        }
+
+        /// <summary>Read the terrain window. Returns true when a new revision was consumed.</summary>
+        public bool ReadTerrain(float[] rects, out int count, out int revision, out float playerHeight,
+            ref int lastRevision)
+        {
+            count = 0;
+            revision = ReadInt(Proto.TerrainOffset + Proto.TH_Revision);
+            playerHeight = ReadFloat(Proto.TerrainOffset + Proto.TH_PlayerHeight);
+            if (revision == lastRevision)
+            {
+                return false;
+            }
+            int seq1 = ReadInt(Proto.TerrainOffset + Proto.TH_Seq);
+            if ((seq1 & 1) != 0)
+            {
+                return false; // writer mid-publish
+            }
+            count = ReadInt(Proto.TerrainOffset + Proto.TH_Count);
+            playerHeight = ReadFloat(Proto.TerrainOffset + Proto.TH_PlayerHeight);
+            int n = System.Math.Min(count, Proto.MaxRects);
+            for (int i = 0; i < n; i++)
+            {
+                int at = Proto.TerrainRectsOffset + i * 16;
+                rects[i * 4 + 0] = ReadFloat(at + 0);
+                rects[i * 4 + 1] = ReadFloat(at + 4);
+                rects[i * 4 + 2] = ReadFloat(at + 8);
+                rects[i * 4 + 3] = ReadFloat(at + 12);
+            }
+            int seq2 = ReadInt(Proto.TerrainOffset + Proto.TH_Seq);
+            if (seq1 != seq2)
+            {
+                return false; // torn, retry next frame
+            }
+            count = n;
+            lastRevision = revision;
+            return true;
         }
 
         // ---- Frame ----

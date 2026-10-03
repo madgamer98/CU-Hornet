@@ -14,7 +14,7 @@ namespace HornetInCasualties
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "dev.cuhornet.hornetincasualties";
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.0";
 
         internal static ManualLogSource Log;
         internal static Plugin Instance;

@@ -15,6 +15,10 @@ namespace HornetExporter
         /// <summary>Latest button bitfield from the host; consumed by InputInjector.</summary>
         public static int InjectedButtons;
 
+        /// <summary>The active link (for TerrainMirror to read the terrain region).</summary>
+        public static LiveLink Instance;
+        public PassthroughLink Link => _link;
+
         private PassthroughLink _link;
         private tk2dSpriteAnimator _anim;
         private Rigidbody2D _rb;
@@ -24,6 +28,7 @@ namespace HornetExporter
 
         private void Awake()
         {
+            Instance = this;
             TryOpen();
         }
 
