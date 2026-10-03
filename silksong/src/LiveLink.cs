@@ -112,6 +112,15 @@ namespace HornetExporter
                 k > 0.0001f ? hv.x / k : 0f, k > 0.0001f ? hv.y / k : 0f,
                 facing, grounded, active);
 
+            // S5 2A: publish Silksong's vitals - they are the source of truth for health/silk/geo.
+            PlayerData pdv = PlayerData.instance;
+            if (pdv != null)
+            {
+                bool dead = (hero.cState != null && hero.cState.dead) || pdv.health <= 0;
+                _link.WriteVitals(pdv.health, pdv.maxHealth, pdv.healthBlue, pdv.silk, pdv.silkMax,
+                    pdv.geo, dead);
+            }
+
             // Diagnostics: log Hornet's own clip + velocity so we can prove input reached her.
             _stateTick++;
             if (_stateTick % 30 == 0)

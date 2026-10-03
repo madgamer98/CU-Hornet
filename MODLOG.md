@@ -683,3 +683,21 @@ reliable fix.
 **Verified:** restarted both games; drove left/right/up/down slashes. Silksong logs
 `publishing isolated frames 640x640 (blank)` with no `no frame` and **no `crop edge` warning**; CU logs
 `received live Hornet frame 640x640`, `w=640 hasPx=1`, `fid` advancing, no size rejects.
+
+## S5 milestone 2A - Vitals channel (2026-10-03, VERIFIED)
+
+Protocol **v10** adds a small `Vitals` region (Silksong -> CU), seqlock-guarded, appended after
+`Events` so no existing offset moved. Fields: `health, maxHealth, healthBlue, silk, silkMax, geo,
+dead` (ints + a 0/1 dead flag; `VitalsSize = 32`, seq last).
+
+- `shared/PassthroughProtocol.cs`: `Version 10`; `VitalsOffset = EventsOffset + EventsSize`;
+  `MappingSize` extended; `VI_*` offsets; `WriteVitals`/`ReadVitals`.
+- `silksong/src/LiveLink.cs`: each `Update`, publishes from `PlayerData.instance`
+  (`health/maxHealth/healthBlue/silk/silkMax/geo`); `dead = HeroController.cState.dead || health <= 0`.
+- `src/LiveLink.cs` (CU): reads vitals and logs on change (2B HUD overlay will consume it). No
+  gameplay effect yet - this is the channel only.
+
+**Verified:** both games restarted, mirror applied. CU logs
+`LiveLink vitals: hp=9/9 blue=0 silk=4/17 geo=0 dead=False` with silk ticking up (4->9) as Hornet
+recovers at the bench; `hp` matches Silksong's 9 mask icons. `dead` false. Frames still 640x640 and
+healthy. Health as source of truth is in place; wiring damage-pinning/death is 2C/2D.

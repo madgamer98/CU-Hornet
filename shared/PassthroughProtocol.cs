@@ -15,7 +15,7 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 9;
+        public const int Version = 10;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -54,7 +54,12 @@ namespace HornetPassthrough
         public const int EventRecordSize = 32;
         public const int EventRecordsOffset = EventsOffset + EventsHeaderSize;
         public const int EventsSize = EventsHeaderSize + MaxEvents * EventRecordSize;
-        public const long MappingSize = EventsOffset + EventsSize;
+        // v10 Vitals (Silksong -> CU): Silksong's own health/silk/geo plus a dead flag. Small and
+        // cheap, so Silksong writes it every frame under a seqlock. Added after Events so it does not
+        // disturb any existing offset.
+        public const int VitalsOffset = EventsOffset + EventsSize;
+        public const int VitalsSize = 32;
+        public const long MappingSize = VitalsOffset + VitalsSize;
 
         // Raw button bits (Input region, CU -> Silksong). Mirrors the host's real binds.
         public const int BtnLeft = 1 << 0;
@@ -155,6 +160,16 @@ namespace HornetPassthrough
 
         // Event types
         public const int EventHitEntity = 1; // A = damage, B/C = hit direction (unused for now)
+
+        // Vitals fields (offsets within the Vitals region)
+        public const int VI_Health = 0;    // int, PlayerData.health (masks)
+        public const int VI_MaxHealth = 4; // int
+        public const int VI_HealthBlue = 8;
+        public const int VI_Silk = 12;
+        public const int VI_SilkMax = 16;
+        public const int VI_Geo = 20;
+        public const int VI_Dead = 24;     // 0/1
+        public const int VI_Seq = 28;      // int seqlock
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -423,6 +438,45 @@ namespace HornetPassthrough
         public int EventWriteIndex
         {
             get { return ReadInt(Proto.EventsOffset + Proto.EV_WriteIndex); }
+        }
+
+        // ---- Vitals (Silksong -> CU) ----
+        /// <summary>Publish Silksong's vitals (small, cheap; written every frame).</summary>
+        public void WriteVitals(int health, int maxHealth, int healthBlue, int silk, int silkMax,
+            int geo, bool dead)
+        {
+            int seq = ReadInt(Proto.VitalsOffset + Proto.VI_Seq);
+            WriteInt(Proto.VitalsOffset + Proto.VI_Seq, seq + 1); // odd = writing
+            WriteInt(Proto.VitalsOffset + Proto.VI_Health, health);
+            WriteInt(Proto.VitalsOffset + Proto.VI_MaxHealth, maxHealth);
+            WriteInt(Proto.VitalsOffset + Proto.VI_HealthBlue, healthBlue);
+            WriteInt(Proto.VitalsOffset + Proto.VI_Silk, silk);
+            WriteInt(Proto.VitalsOffset + Proto.VI_SilkMax, silkMax);
+            WriteInt(Proto.VitalsOffset + Proto.VI_Geo, geo);
+            WriteInt(Proto.VitalsOffset + Proto.VI_Dead, dead ? 1 : 0);
+            WriteInt(Proto.VitalsOffset + Proto.VI_Seq, seq + 2); // even = stable
+        }
+
+        /// <summary>Read Silksong's vitals. False if the writer was mid-publish.</summary>
+        public bool ReadVitals(out int health, out int maxHealth, out int healthBlue, out int silk,
+            out int silkMax, out int geo, out bool dead)
+        {
+            health = maxHealth = healthBlue = silk = silkMax = geo = 0;
+            dead = false;
+            int seq1 = ReadInt(Proto.VitalsOffset + Proto.VI_Seq);
+            if ((seq1 & 1) != 0)
+            {
+                return false;
+            }
+            health = ReadInt(Proto.VitalsOffset + Proto.VI_Health);
+            maxHealth = ReadInt(Proto.VitalsOffset + Proto.VI_MaxHealth);
+            healthBlue = ReadInt(Proto.VitalsOffset + Proto.VI_HealthBlue);
+            silk = ReadInt(Proto.VitalsOffset + Proto.VI_Silk);
+            silkMax = ReadInt(Proto.VitalsOffset + Proto.VI_SilkMax);
+            geo = ReadInt(Proto.VitalsOffset + Proto.VI_Geo);
+            dead = ReadInt(Proto.VitalsOffset + Proto.VI_Dead) != 0;
+            int seq2 = ReadInt(Proto.VitalsOffset + Proto.VI_Seq);
+            return seq1 == seq2;
         }
 
         /// <summary>Read one event by absolute index. False if it was overwritten by the ring.</summary>

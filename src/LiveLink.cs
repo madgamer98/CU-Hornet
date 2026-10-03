@@ -56,6 +56,9 @@ namespace HornetInCasualties
         private int _eventReadIndex;
         private float _pupX, _pupY;
         private bool _pupValid;
+        private bool _vtValid;
+        private int _vtHealth, _vtMax, _vtBlue, _vtSilk, _vtSilkMax, _vtGeo;
+        private bool _vtDead;
 
         public void Init(Body body)
         {
@@ -143,6 +146,24 @@ namespace HornetInCasualties
                 {
                     Plugin.Log.LogWarning("LiveLink: Silksong inactive/heartbeat lost; releasing puppet.");
                     DisablePuppet();
+                }
+            }
+
+            // S5 2A: read Silksong's vitals (the source of truth) and log them on change so they can
+            // be checked against Silksong's HUD. The HUD overlay itself is 2B.
+            int vh, vmax, vblue, vsilk, vsmax, vgeo;
+            bool vdead;
+            if (_link.ReadVitals(out vh, out vmax, out vblue, out vsilk, out vsmax, out vgeo, out vdead))
+            {
+                if (!_vtValid || vh != _vtHealth || vmax != _vtMax || vblue != _vtBlue ||
+                    vsilk != _vtSilk || vsmax != _vtSilkMax || vgeo != _vtGeo || vdead != _vtDead)
+                {
+                    _vtValid = true;
+                    _vtHealth = vh; _vtMax = vmax; _vtBlue = vblue; _vtSilk = vsilk;
+                    _vtSilkMax = vsmax; _vtGeo = vgeo; _vtDead = vdead;
+                    Plugin.Log.LogInfo("LiveLink vitals: hp=" + vh + "/" + vmax + " blue=" + vblue +
+                                       " silk=" + vsilk + "/" + vsmax + " geo=" + vgeo +
+                                       " dead=" + vdead);
                 }
             }
 
