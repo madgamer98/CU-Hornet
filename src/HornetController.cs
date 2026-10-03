@@ -16,6 +16,7 @@ namespace HornetInCasualties
         private float _dashTime;
         private float _dashDir;
         private float _dashReady;
+        private float _savedMaxSpeed;
 
         private float _slashUntil;
         private float _slashReady;
@@ -37,13 +38,59 @@ namespace HornetInCasualties
             _avatar = avatar;
             _body = body;
             _rb = body.rb;
+            if (Plugin.KinematicMode.Value)
+            {
+                FreezeRagdoll();
+            }
         }
 
-        // Dash is positional so the vanilla controller can't damp it away.
+        // Freeze the vanilla ragdoll limbs; Hornet moves the body as a single kinematic character.
+        private void FreezeRagdoll()
+        {
+            if (_body.limbs == null)
+            {
+                return;
+            }
+            foreach (Limb limb in _body.limbs)
+            {
+                if (limb == null)
+                {
+                    continue;
+                }
+                if (limb.rb != null)
+                {
+                    limb.rb.bodyType = RigidbodyType2D.Kinematic;
+                }
+                foreach (Collider2D c in limb.GetComponentsInChildren<Collider2D>(true))
+                {
+                    c.enabled = false;
+                }
+            }
+            if (_body.col != null)
+            {
+                _body.col.enabled = true;
+            }
+            Plugin.Log.LogInfo("Hornet: ragdoll frozen (kinematic mode).");
+        }
+
         private void FixedUpdate()
         {
-            if (_dashTime <= 0f || _rb == null)
+            if (_rb == null)
             {
+                return;
+            }
+
+            if (_dashTime <= 0f)
+            {
+                // Clean kinematic locomotion (vanilla FixedUpdate is skipped in this mode).
+                if (Plugin.KinematicMode.Value && Plugin.EnableMoves.Value)
+                {
+                    _rb.gravityScale = 1f;
+                    float target = _body.moveDir.x * Plugin.MoveSpeed.Value;
+                    float accel = Plugin.MoveAccel.Value * (_body.grounded ? 1f : 0.65f);
+                    float vx = Mathf.MoveTowards(_rb.velocity.x, target, accel * Time.fixedDeltaTime);
+                    _rb.velocity = new Vector2(vx, _rb.velocity.y);
+                }
                 return;
             }
             _dashTime -= Time.fixedDeltaTime;
@@ -52,6 +99,8 @@ namespace HornetInCasualties
             if (_dashTime <= 0f)
             {
                 _rb.gravityScale = 1f;
+                // Restore the vanilla speed cap we lifted for the dash.
+                _body.maxSpeed = _savedMaxSpeed;
             }
         }
 
@@ -164,6 +213,11 @@ namespace HornetInCasualties
             _dashDir = _avatar.FacingRight ? 1f : -1f;
             _dashTime = Plugin.DashDuration.Value;
             _dashReady = now + Plugin.DashDuration.Value + Plugin.DashCooldown.Value;
+            // CU clamps rb.velocity.x to actualMaxSpeed while grounded; lift the cap (and clear
+            // endedJump, which would double gravity) so the dash keeps its distance.
+            _savedMaxSpeed = _body.maxSpeed;
+            _body.maxSpeed = Mathf.Max(_savedMaxSpeed, Plugin.DashSpeed.Value * 2f);
+            _body.endedJump = false;
             _avatar.PlayAction("Dash", Plugin.DashDuration.Value + 0.1f);
             Plugin.Log.LogInfo("move: dash dir=" + _dashDir);
         }

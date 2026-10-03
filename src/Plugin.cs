@@ -44,6 +44,9 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> NeedleReturnSpeed;
         internal static ConfigEntry<float> NeedleRange;
         internal static ConfigEntry<float> NeedleCooldown;
+        internal static ConfigEntry<bool> KinematicMode;
+        internal static ConfigEntry<float> MoveSpeed;
+        internal static ConfigEntry<float> MoveAccel;
         internal static ConfigEntry<float> DoubleJumpSpeed;
         internal static ConfigEntry<float> WallSlideSpeed;
         internal static ConfigEntry<float> WallJumpX;
@@ -84,6 +87,10 @@ namespace HornetInCasualties
             NeedleReturnSpeed = Config.Bind("Moves", "NeedleReturnSpeed", 32f, "Needle return speed.");
             NeedleRange = Config.Bind("Moves", "NeedleRange", 9f, "Distance before the needle returns.");
             NeedleCooldown = Config.Bind("Moves", "NeedleCooldown", 0.35f, "Needle throw cooldown (s).");
+            KinematicMode = Config.Bind("Moves", "KinematicMode", true,
+                "Replace the vanilla ragdoll movement with a clean kinematic controller (fixes dash/pogo).");
+            MoveSpeed = Config.Bind("Moves", "MoveSpeed", 7.5f, "Kinematic run speed.");
+            MoveAccel = Config.Bind("Moves", "MoveAccel", 90f, "Kinematic acceleration.");
             DoubleJumpSpeed = Config.Bind("Moves", "DoubleJumpSpeed", 12f, "Double jump upward speed.");
             WallSlideSpeed = Config.Bind("Moves", "WallSlideSpeed", 2.5f, "Downward speed while wall sliding.");
             WallJumpX = Config.Bind("Moves", "WallJumpX", 11f, "Wall jump horizontal speed.");
@@ -131,6 +138,38 @@ namespace HornetInCasualties
     }
 
     /// <summary>
+    /// <summary>
+    /// Replaces the vanilla ragdoll movement: when Hornet is driving, CU's `Body.FixedUpdate`
+    /// (forces, speed clamp, wall slide, step-up) is skipped and HornetController moves the body.
+    /// </summary>
+    [HarmonyPatch(typeof(Body), "FixedUpdate")]
+    internal static class BodyFixedUpdatePatch
+    {
+        private static bool Prefix()
+        {
+            return !(Plugin.EnableMoves.Value && Plugin.KinematicMode.Value);
+        }
+    }
+
+    /// <summary>
+    /// Lets Hornet wall-jump the same wall repeatedly (Silksong behaviour) by clearing CU's
+    /// "must alternate walls" gate before every jump.
+    /// </summary>
+    [HarmonyPatch(typeof(Body), "Jump")]
+    internal static class BodyJumpPatch
+    {
+        private static readonly AccessTools.FieldRef<Body, bool> FirstWallJump =
+            AccessTools.FieldRefAccess<Body, bool>("firstWallJump");
+
+        private static void Prefix(Body __instance)
+        {
+            if (Plugin.EnableMoves.Value)
+            {
+                FirstWallJump(__instance) = true;
+            }
+        }
+    }
+
     /// Dev-only oracle: reach a controlled test area without clicking through menus.
     /// F9 (from the menu) loads the tutorial world; F8 jumps straight to the flat SandboxCourse;
     /// F10 starts a normal run.

@@ -239,8 +239,23 @@ driving it headless is the full SkyCraft build.
   Silksong's repeat-cling behaviour is wanted, patch `Body.Jump`'s `firstWallJump`/`lastJumpedOnRightWall`.
 - Needle art is still procedural; capture colors still washed.
 
+## Kinematic takeover (2026-10-02)
+- Root cause of weak dash/pogo: CU's `Body.FixedUpdate` **clamps rb.velocity.x to `actualMaxSpeed`**
+  while grounded (line 2565) and doubles gravity when `endedJump` (line 2556). Setting velocity was
+  therefore undone.
+- **Decision (human): do not port Silksong's `HeroController`** — it's PlayMaker-driven and coupled to
+  TeamCherry/GameManager/PlayerData; Silksong is Unity 6000 vs CU 2022 (can't load its assembly). Instead
+  **port the behaviour**: run a clean controller in CU using Silksong's constants as the spec.
+- **Implemented (config `[Moves] KinematicMode`, default true):** Harmony prefix on `Body.FixedUpdate`
+  skips CU's movement while Hornet drives; `HornetController.FixedUpdate` does locomotion (moveDir →
+  `MoveSpeed` with `MoveAccel`), dash (positional, no clamp), gravity. On init it **freezes the ragdoll**
+  (limb rigidbodies → Kinematic, limb colliders disabled, root `col` kept). Wall-jump gate cleared via
+  `BodyJumpPatch` (same-wall re-jump allowed).
+- **Needs in-game verification:** `grounded` was false in the (invalid, menu) test; check she stands on
+  the floor, can jump, and that freezing limbs didn't break CU ground detection/`standing`.
+
 ## Next
-- Re-bake (Silksong restart) to get NeedleThrow/Harpoon/DoubleJump/Wall animations + effect clips; bake needle art.
+- Verify kinematic movement in the sandbox; fix grounded/standing if needed.
 - Bind/heal; verify pogo/double jump/wall in game.
 - Un-premultiply capture color; tune scale/offset.
 - Optional: live state link.
