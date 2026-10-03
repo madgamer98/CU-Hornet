@@ -89,24 +89,25 @@ namespace HornetExporter
                     continue;
                 }
 
-                go.SetActive(true);
-                go.layer = ProxyLayer;
-                go.transform.position = new Vector3(silk.x, silk.y, 0f);
-                BoxCollider2D box = go.GetComponent<BoxCollider2D>();
-                box.isTrigger = true;
-                box.size = new Vector2(Mathf.Max(w, 0.2f) * k, Mathf.Max(h, 0.2f) * k);
-                ProxyRelay relay = go.GetComponent<ProxyRelay>();
-                if (relay != null)
-                {
-                    relay.EntityId = Mathf.RoundToInt(Values[v + 0]);
-                }
-                // S4 phase 3: a CU biter asks us to damage Hornet on contact (explicit TakeDamage call).
+                // Set the contact flag BEFORE activating/positioning the proxy, so if it comes up
+                // already overlapping Hornet the first trigger callback already sees Contact = true.
                 ContactDamage cd = go.GetComponent<ContactDamage>();
                 if (cd != null)
                 {
                     cd.Damage = ContactDamageAmount;
                     cd.SetContact((flags & Proto.EntFlagContactDamage) != 0);
                 }
+                ProxyRelay relay = go.GetComponent<ProxyRelay>();
+                if (relay != null)
+                {
+                    relay.EntityId = Mathf.RoundToInt(Values[v + 0]);
+                }
+                go.SetActive(true);
+                go.layer = ProxyLayer;
+                go.transform.position = new Vector3(silk.x, silk.y, 0f);
+                BoxCollider2D box = go.GetComponent<BoxCollider2D>();
+                box.isTrigger = true;
+                box.size = new Vector2(Mathf.Max(w, 0.2f) * k, Mathf.Max(h, 0.2f) * k);
             }
             for (int i = count; i < Pool.Count; i++)
             {

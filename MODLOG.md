@@ -733,7 +733,7 @@ transparently lets the CU world show through. One benign `HUD capture returned n
 startup (menu/transition, HUD camera inactive), then it published. A damage-driven mask-loss update is
 still worth an eyeball; publishing is gated on the vitals hash so any health/silk/geo change republishes.
 
-## S5 milestone 3 - CU damage pinned off (2C) + proxy-only damage gate (2E) (2026-10-03, built, awaiting human verify)
+## S5 milestone 3 - CU damage pinned off (2C) + proxy-only damage gate (2E) (2026-10-03, VERIFIED)
 
 Protocol unchanged (v11). Silksong's health is the authority while mirrored.
 
@@ -760,9 +760,17 @@ Protocol unchanged (v11). Silksong's health is the authority while mirrored.
   gate lets it through. Verified by inspection of `EntityProxies.EnsurePool` (adds `ContactDamage` to
   each proxy `go`).
 
-Builds clean; both games restarted; mirror applied; HUD still renders; no Harmony/exception errors in
-either log. Still to verify by hand: (a) run into a console-spawned CU biter and confirm Hornet loses
-exactly 1 mask (proxy path survives the gate); (b) confirm CU's own spikes/biters can't hurt her and CU
-does not die (2C); (c) if reachable, confirm a native Silksong hazard/enemy no longer damages her (2E).
-Console text cannot be driven with `um win drive type` (CU's console ignores synthetic unicode), so the
-entity test needs the human.
+**Verified (human):** side contacts and plain top landings cost exactly 1 mask per contact
+(`HURT! dmg=1 hazard=ENEMY hp 8->7 ... ->0`), the gate logs `proxy=True -> allow`, and a real down-slash
+pogo bounces without damage. Console text cannot be driven with `um win drive type` (CU's console
+ignores synthetic unicode), so the entity test is manual.
+
+### Contact-damage debug (cost several restarts)
+- **Symptom:** a spawned shadecrawler dealt no contact damage. A custom probe showed the proxy only ever
+  overlapped `ActiveRegion(L29)`, never Hornet's `HeroBox`, and its position was ~5.6 units off.
+- **Bounds:** the proxy centres on the actor's `Rigidbody2D` and sizes from the nearest collider (with a small floor) so it reliably covers the body.
+- **Root cause 2 (enter vs stay):** a proxy (re)activated already overlapping Hornet never fires
+  `OnTriggerEnter2D`; added `OnTriggerStay2D`. `SetContact` is now set before the proxy is activated.
+- **Pogo:** contact damage is skipped while `cState.downAttacking/downSpikeBouncing/downSpikeAntic`, so
+  a down-slash bounces (no damage) while a plain landing hurts.
+- CU's own body is still damage-pinned (2C).

@@ -633,32 +633,50 @@ namespace HornetInCasualties
                 {
                     continue;
                 }
-                // One proxy covering the whole actor, centred on its combined collider bounds.
-                Bounds b = col.bounds;
+                // Center the proxy on the actor's rigidbody (its body), not on a union of collider
+                // bounds: when a biter's legs splay/stretch, a leg collider can sit far from the body
+                // and drag the union off-centre (observed: proxy at y=10.6 while Hornet was at y=5).
+                // Size it from the root collider nearest the body, with a floor so contact is reliable.
+                Rigidbody2D arb = be.GetComponent<Rigidbody2D>();
+                Vector2 center = arb != null ? arb.position : (Vector2)be.transform.position;
                 _entCols.Clear();
-                be.GetComponentsInChildren(true, _entCols);
+                be.GetComponents(_entCols);
+                float bestSqr = float.MaxValue;
+                Vector2 size = new Vector2(1.2f, 1.2f);
                 for (int ci = 0; ci < _entCols.Count; ci++)
                 {
                     Collider2D cc = _entCols[ci];
-                    if (cc != null && cc.enabled)
+                    if (cc == null || !cc.enabled)
                     {
-                        b.Encapsulate(cc.bounds);
+                        continue;
+                    }
+                    float d = ((Vector2)cc.bounds.center - center).sqrMagnitude;
+                    if (d < bestSqr)
+                    {
+                        bestSqr = d;
+                        size = cc.bounds.size;
                     }
                 }
+                // Floor the proxy size: a biter squashed under the kinematic puppet reports a small,
+                // low body, so its proxy top fell just below Hornet's hurtbox and a plain landing did
+                // not register (only side contacts did). A ~2 CU floor makes contact reliable.
+                size.x = Mathf.Max(size.x, 2.0f);
+                size.y = Mathf.Max(size.y, 2.0f);
                 int flags = Proto.EntFlagAlive;
                 if (be.animal)
                 {
                     flags |= Proto.EntFlagBounceable;
                 }
-                // S4 phase 3: biters damage Hornet on contact via a proxy DamageHero. CU animals
+                // S4 phase 3: biters damage Hornet on contact via the proxy's ContactDamage. CU animals
                 // damage limbs through SpiderHandler (and its subclasses), so use that as the signal.
-                if (be.GetComponent<SpiderHandler>() != null || be.GetComponentInParent<SpiderHandler>() != null)
+                bool contact = be.GetComponent<SpiderHandler>() != null ||
+                               be.GetComponentInParent<SpiderHandler>() != null;
+                if (contact)
                 {
                     flags |= Proto.EntFlagContactDamage;
                 }
                 _entityById[eid] = be;
-                AddEnt(ref count, eid, b.center.x, b.center.y,
-                    b.size.x, b.size.y, be.health, be.health, flags);
+                AddEnt(ref count, eid, center.x, center.y, size.x, size.y, be.health, be.health, flags);
             }
 
             _entRev++;
