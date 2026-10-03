@@ -130,6 +130,12 @@ namespace HornetInCasualties
             {
                 return; // guard against a bad capture
             }
+            // Ignore sudden size jumps (the diff occasionally catches a large effect), which would
+            // otherwise render Hornet huge for a frame.
+            if (_tex != null && (w > _lastW * 1.6f || h > _lastH * 1.6f || w < _lastW * 0.6f || h < _lastH * 0.6f))
+            {
+                return;
+            }
             if (_tex == null || _lastW != w || _lastH != h)
             {
                 _lastW = w;
