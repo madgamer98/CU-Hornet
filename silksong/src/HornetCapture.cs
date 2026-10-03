@@ -13,6 +13,49 @@ namespace HornetExporter
     {
         private const int Pad = 110;
 
+        /// <summary>Capture Hornet isolated and return raw RGBA32 bytes (bottom-up, Unity order).</summary>
+        public static bool CaptureRgba(out byte[] rgba, out int width, out int height, out float pivotX,
+            out float pivotY, out float worldX, out float worldY)
+        {
+            rgba = null;
+            width = height = 0;
+            pivotX = pivotY = worldX = worldY = 0f;
+
+            HeroController hero = HeroController.instance;
+            Camera cam = MainCamera();
+            if (hero == null || cam == null)
+            {
+                return false;
+            }
+
+            RenderTexture rt = RenderTexture.GetTemporary(Screen.width, Screen.height, 24);
+            ScreenRect rect = ComputeRect(hero, cam);
+
+            Color32[] with = RenderRead(cam, rt, rect);
+            SetBodyEnabled(hero, false);
+            Color32[] without = RenderRead(cam, rt, rect);
+            SetBodyEnabled(hero, true);
+            cam.targetTexture = null;
+            RenderTexture.ReleaseTemporary(rt);
+
+            float[] pivot = new float[2];
+            Texture2D tex = DiffCrop(with, without, rect, hero, cam, pivot);
+            if (tex == null)
+            {
+                return false;
+            }
+            rgba = tex.GetRawTextureData<byte>().ToArray();
+            width = tex.width;
+            height = tex.height;
+            pivotX = pivot[0];
+            pivotY = pivot[1];
+            Vector3 p = hero.transform.position;
+            worldX = p.x;
+            worldY = p.y;
+            Object.Destroy(tex);
+            return true;
+        }
+
         public static void CaptureToFile()
         {
             HeroController hero = HeroController.instance;

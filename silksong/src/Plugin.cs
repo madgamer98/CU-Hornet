@@ -33,6 +33,11 @@ namespace HornetExporter
             go.hideFlags = HideFlags.HideAndDontSave;
             go.AddComponent<Hotkeys>();
 
+            var link = new GameObject("HornetExporter.LiveLink");
+            DontDestroyOnLoad(link);
+            link.hideFlags = HideFlags.HideAndDontSave;
+            link.AddComponent<LiveLink>();
+
             Log.LogInfo("Hornet Exporter v" + Version + " loaded. Press F7 in gameplay to inspect Hornet.");
         }
 

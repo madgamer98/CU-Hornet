@@ -21,6 +21,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Shared passthrough protocol (also compiled into the CU plugin). -->
+    <Compile Include="..\shared\PassthroughProtocol.cs" Link="PassthroughProtocol.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="BepInEx"><HintPath>$(SsBepInExCore)\BepInEx.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(SsBepInExCore)\0Harmony.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp"><HintPath>$(SsManaged)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>

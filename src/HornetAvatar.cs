@@ -75,6 +75,19 @@ namespace HornetInCasualties
             {
                 HornetSprites.Load(Path.GetDirectoryName(Plugin.Instance.Info.Location));
             }
+            if (Plugin.LiveMode.Value)
+            {
+                // Passthrough mode: the live link draws Hornet; skip the baked port entirely.
+                _renderer.enabled = false;
+                LiveLink live = body.gameObject.GetComponent<LiveLink>();
+                if (live == null)
+                {
+                    live = body.gameObject.AddComponent<LiveLink>();
+                }
+                live.Init(body);
+                return;
+            }
+
             if (HornetSprites.Ready)
             {
                 _animator.Play("Idle");
@@ -93,6 +106,7 @@ namespace HornetInCasualties
                 }
                 controller.Init(this, body);
             }
+
         }
 
         private void LateUpdate()

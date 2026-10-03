@@ -45,6 +45,7 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> NeedleReturnSpeed;
         internal static ConfigEntry<float> NeedleRange;
         internal static ConfigEntry<float> NeedleCooldown;
+        internal static ConfigEntry<bool> LiveMode;
         internal static ConfigEntry<bool> KinematicMode;
         internal static ConfigEntry<float> MoveSpeed;
         internal static ConfigEntry<float> MoveAccel;
@@ -90,6 +91,8 @@ namespace HornetInCasualties
             NeedleReturnSpeed = Config.Bind("Moves", "NeedleReturnSpeed", 32f, "Needle return speed.");
             NeedleRange = Config.Bind("Moves", "NeedleRange", 9f, "Distance before the needle returns.");
             NeedleCooldown = Config.Bind("Moves", "NeedleCooldown", 0.35f, "Needle throw cooldown (s).");
+            LiveMode = Config.Bind("Passthrough", "LiveMode", false,
+                "Run the live passthrough link to Silksong (experimental).");
             KinematicMode = Config.Bind("Moves", "KinematicMode", false,
                 "Replace the vanilla ragdoll movement with a kinematic controller (experimental; can sink into floors).");
             MoveSpeed = Config.Bind("Moves", "MoveSpeed", 7.5f, "Kinematic run speed.");
