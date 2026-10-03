@@ -494,8 +494,12 @@ Protocol v8 adds an **`Events` ring** (Silksong -> CU): single writer/reader, mo
   (index out of range → silent return). Dummies now use **negative ids** (`-(i+1)`); `ApplyHit` treats
   `id < 0` as a dummy. Verified by spawning a `shadecrawler` via CU's console and slashing it:
   `Entity 16736012 hit for 5 -> hp 1.25 -> -3.75` (killed), and `Entity 16759044 -> hp 99990`.
-- **Jump refresh (attempt):** Hornet's ground jump was being treated as the air/double jump on the mirror.
-  Ground-layer `OnCollisionEnter2D` **does** fire on the proxy boxes (confirmed), so the likely cause is
-  HK's cached ground probe (`TouchGroundResult` only re-runs when the hero moves). While the mirror is
-  active, `LiveLink.Update` now forces `hero.CheckTouchingGround(true)` each frame (`gnd=True` observed).
-  Needs a human jump test to confirm.
+- **Jump refresh (2026-10-03, inconclusive / likely not a bug):** reported as "ground jump always
+  triggers the double jump". Investigation: Silksong has **no `Jump` clip** — Hornet's ground-jump
+  animation is literally named `Double Jump` (verified via `clips.json`). On *vanilla* terrain (mirror
+  off) a ground jump also plays `Double Jump`, and `hero.CanJump()` is true before and after, so the
+  ground jump refreshes normally. Landing `OnCollisionEnter2D` events **do** fire on the proxy boxes.
+  Kept two harmless safeguards: `LiveLink` forces `hero.CheckTouchingGround(true)` while the mirror is
+  active, and a prefix on `HeroController.OnCollisionEnter2D` forces the probe so the `HeroCtrl-Landed`
+  event isn't skipped by HK's cached ground check. Needs the human to clarify the exact symptom (e.g.
+  missing *air* double jump vs animation name).
