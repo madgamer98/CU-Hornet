@@ -41,9 +41,82 @@ namespace HornetInCasualties
             }
 
             float now = Time.time;
+            HandleJump();
+            HandleWall();
             HandleDash(now);
             HandleSlash(now);
             HandleNeedle(now);
+        }
+
+        private bool _usedDoubleJump;
+        private int _wallSide;
+        private float _wallActionUntil;
+
+        private void HandleJump()
+        {
+            if (_body.grounded)
+            {
+                _usedDoubleJump = false;
+            }
+            if (!Input.GetKeyDown(KeyBinds.GetBind("jump")))
+            {
+                return;
+            }
+            if (_wallSide != 0)
+            {
+                return; // handled by HandleWall
+            }
+            if (!_body.grounded && !_usedDoubleJump)
+            {
+                _usedDoubleJump = true;
+                if (_rb != null)
+                {
+                    _rb.velocity = new Vector2(_rb.velocity.x, Plugin.DoubleJumpSpeed.Value);
+                }
+                _avatar.PlayAction("Double Jump", 0.4f);
+                Plugin.Log.LogInfo("move: double jump");
+            }
+        }
+
+        private void HandleWall()
+        {
+            _wallSide = 0;
+            if (_body.grounded || _rb == null)
+            {
+                return;
+            }
+            float reach = 0.9f;
+            if (Physics2D.Raycast(_body.transform.position, Vector2.right, reach, LayerMask.GetMask("Ground")))
+            {
+                _wallSide = 1;
+            }
+            else if (Physics2D.Raycast(_body.transform.position, Vector2.left, reach, LayerMask.GetMask("Ground")))
+            {
+                _wallSide = -1;
+            }
+            if (_wallSide == 0)
+            {
+                return;
+            }
+
+            // Slide down the wall.
+            if (_rb.velocity.y < 0f)
+            {
+                _rb.velocity = new Vector2(_rb.velocity.x, -Plugin.WallSlideSpeed.Value);
+            }
+            _usedDoubleJump = false;
+
+            if (Input.GetKeyDown(KeyBinds.GetBind("jump")))
+            {
+                _rb.velocity = new Vector2(-_wallSide * Plugin.WallJumpX.Value, Plugin.WallJumpY.Value);
+                _avatar.PlayAction("Walljump", 0.35f);
+                Plugin.Log.LogInfo("move: wall jump side=" + _wallSide);
+            }
+            else if (Time.time >= _wallActionUntil)
+            {
+                _avatar.PlayAction("Wall Slide", 0.2f);
+                _wallActionUntil = Time.time + 0.15f;
+            }
         }
 
         private void HandleNeedle(float now)

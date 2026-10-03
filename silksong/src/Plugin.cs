@@ -82,6 +82,7 @@ namespace HornetExporter
             "DownSpike", "DownSpike Antic", "Downspike Recovery", "DownSlashEffect", "Wall Slash", "Recoil",
             // wall / mantle
             "Wall Slide", "Wall Cling", "Walljump", "Wall Scramble", "Wall Scramble Antic", "Mantle Cling",
+            "Double Jump", "Double Jump Effect",
             // needle throw / harpoon
             "NeedleThrow AnticA", "NeedleThrow AnticG", "NeedleThrow Throwing", "NeedleThrow Out",
             "NeedleThrow Return", "NeedleThrow Catch", "NeedleThrow Thunk",

@@ -44,6 +44,10 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> NeedleReturnSpeed;
         internal static ConfigEntry<float> NeedleRange;
         internal static ConfigEntry<float> NeedleCooldown;
+        internal static ConfigEntry<float> DoubleJumpSpeed;
+        internal static ConfigEntry<float> WallSlideSpeed;
+        internal static ConfigEntry<float> WallJumpX;
+        internal static ConfigEntry<float> WallJumpY;
 
         private Harmony _harmony;
 
@@ -80,6 +84,10 @@ namespace HornetInCasualties
             NeedleReturnSpeed = Config.Bind("Moves", "NeedleReturnSpeed", 32f, "Needle return speed.");
             NeedleRange = Config.Bind("Moves", "NeedleRange", 9f, "Distance before the needle returns.");
             NeedleCooldown = Config.Bind("Moves", "NeedleCooldown", 0.35f, "Needle throw cooldown (s).");
+            DoubleJumpSpeed = Config.Bind("Moves", "DoubleJumpSpeed", 12f, "Double jump upward speed.");
+            WallSlideSpeed = Config.Bind("Moves", "WallSlideSpeed", 2.5f, "Downward speed while wall sliding.");
+            WallJumpX = Config.Bind("Moves", "WallJumpX", 11f, "Wall jump horizontal speed.");
+            WallJumpY = Config.Bind("Moves", "WallJumpY", 13f, "Wall jump vertical speed.");
 
             _harmony = new Harmony(Guid);
             _harmony.PatchAll();
