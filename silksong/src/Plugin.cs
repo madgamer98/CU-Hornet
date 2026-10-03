@@ -17,7 +17,7 @@ namespace HornetExporter
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "dev.cuhornet.silksong.exporter";
-        public const string Version = "0.0.3";
+        public const string Version = "0.0.4";
 
         internal static ManualLogSource Log;
         private Harmony _harmony;
@@ -61,7 +61,19 @@ namespace HornetExporter
             {
                 DumpClips();
             }
+
+            if (Input.GetKeyDown(KeyCode.F5))
+            {
+                HornetCapture.Bake(DefaultClips);
+            }
         }
+
+        private static readonly string[] DefaultClips =
+        {
+            "Idle", "Turn", "Run", "Airborne", "Land", "HardLand", "Soft Land",
+            "Slash", "SlashAlt", "SlashEffect", "UpSlash", "DownSpike", "Dash",
+            "Wall Scramble", "BindCharge Ground", "Evade",
+        };
 
         private void DumpClips()
         {
