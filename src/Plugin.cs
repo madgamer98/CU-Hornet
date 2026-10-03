@@ -25,6 +25,9 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> AvatarOffsetX;
         internal static ConfigEntry<float> AvatarOffsetY;
         internal static ConfigEntry<bool> LiveMode;
+        internal static ConfigEntry<KeyboardShortcut> KeySlash;
+        internal static ConfigEntry<KeyboardShortcut> KeyDash;
+        internal static ConfigEntry<KeyboardShortcut> KeyNeedle;
 
         private Harmony _harmony;
 
@@ -43,6 +46,10 @@ namespace HornetInCasualties
             AvatarScale = Config.Bind("Avatar", "Scale", 1.6f, "Hornet sprite scale.");
             AvatarOffsetX = Config.Bind("Avatar", "OffsetX", 0.2f, "Hornet horizontal offset (sprite units).");
             AvatarOffsetY = Config.Bind("Avatar", "OffsetY", -0.1f, "Hornet vertical offset (sprite units).");
+            KeySlash = Config.Bind("Moves", "KeySlash", new KeyboardShortcut(KeyCode.J),
+                "Slash (the action is forwarded to Silksong).");
+            KeyDash = Config.Bind("Moves", "KeyDash", new KeyboardShortcut(KeyCode.K), "Dash.");
+            KeyNeedle = Config.Bind("Moves", "KeyNeedle", new KeyboardShortcut(KeyCode.L), "Throw the needle.");
             DebugKeys = Config.Bind("Dev", "DebugKeys", true,
                 "F1/F2 scale, F3/F4 offsetY, F5/F6 offsetX. F9 tutorial, F10 run.");
 

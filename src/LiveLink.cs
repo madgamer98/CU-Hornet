@@ -64,7 +64,15 @@ namespace HornetInCasualties
             float vx = _body.rb != null ? _body.rb.velocity.x : 0f;
             float vy = _body.rb != null ? _body.rb.velocity.y : 0f;
             Vector3 p = _body.transform.position;
-            _link.WriteCuState(p.x, p.y, vx, vy, _body.isRight ? 1 : -1, Grounded(vy), 1);
+
+            int flags = Proto.FlagEnabled;
+            if (Input.GetKey(Plugin.KeySlash.Value.MainKey)) flags |= Proto.FlagAttack;
+            if (Input.GetKey(Plugin.KeyDash.Value.MainKey)) flags |= Proto.FlagDash;
+            if (Input.GetKey(Plugin.KeyNeedle.Value.MainKey)) flags |= Proto.FlagNeedle;
+            if (Input.GetKey(KeyCode.W)) flags |= Proto.FlagUp;
+            if (Input.GetKey(KeyCode.S)) flags |= Proto.FlagDown;
+
+            _link.WriteCuState(p.x, p.y, vx, vy, _body.isRight ? 1 : -1, Grounded(vy), flags);
 
             int w, h, fid;
             float px, py, wx, wy;

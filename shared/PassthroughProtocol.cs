@@ -36,6 +36,14 @@ namespace HornetPassthrough
         public const int HO_CuHeartbeat = 16; // long ms
         public const int HO_SilkHeartbeat = 24;
 
+        // CuState flags bits
+        public const int FlagEnabled = 1 << 0;
+        public const int FlagAttack = 1 << 1;
+        public const int FlagDash = 1 << 2;
+        public const int FlagNeedle = 1 << 3;
+        public const int FlagUp = 1 << 4;
+        public const int FlagDown = 1 << 5;
+
         // CuState (CU -> Silksong)
         public const int CO_PosX = 0;
         public const int CO_PosY = 4;
