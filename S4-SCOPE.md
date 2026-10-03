@@ -96,12 +96,13 @@ committing.
 - Bump `Version`; if entity count grows, consider a second mapping file.
 
 ## Phased plan
-1. **Pogo slice** — stream 1–2 CU enemies; build pogo proxies; verify Hornet down-spikes one and bounces
-   (log the bounce). No damage yet.
-2. **Hornet → actor damage** — relay hits; apply CU damage + damage numbers; verify HP drops.
-3. **Actor → Hornet damage** — proxy `DamageHero` (or event); verify Hornet takes damage with i-frames.
-4. **Blank-slate capture** — dedicated camera → PNG; solve lighting; switch CU to consume it.
-5. **Scale unification** — fixed capture PPU; derive CU display scale from `k`; delete manual tuning.
+1. **Pogo slice** — ✅ **done/verified** (2026-10-03): entities stream + layer-19 pogo proxies; real enemy pogo confirmed.
+2. **Hornet → actor damage** — ✅ **done/verified**: `Events` ring + `ProxyRelay`; CU applied damage/killed a shadecrawler. Follow-up: use real nail damage instead of fixed 5.
+3. **Actor → Hornet damage** — ⬜ **next**: proxy `DamageHero` (or `HeroDamaged` event); verify Hornet takes damage with i-frames.
+4. **Blank-slate capture** — ⬜ **deferred by human** (do after 3): dedicated camera → PNG; solve lighting; switch CU to consume it.
+5. **Scale unification** — ⬜ **deferred**: fixed capture PPU; derive CU display scale from `k`; delete manual tuning.
+
+Protocol is actually at **v8** (v5 + terrain anchor + player state + larger rect/entity caps).
 
 ## Risks / unknowns
 - Lightweight proxies may not cover parry/charge/status interactions that expect a `HealthManager`.

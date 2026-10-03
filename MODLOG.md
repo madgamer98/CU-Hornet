@@ -501,3 +501,54 @@ Protocol v8 adds an **`Events` ring** (Silksong -> CU): single writer/reader, mo
   `HeroJump`/`HeroJump(bool)`/`HeroJumpNoEffect` clear the gate, `DoDoubleJump` prefix checks it, and
   `InputInjector` re-arms on release). Wall jumps don't set the gate. Verified by the human: ground jump
   is clean, a second press gives the wings, wall-jump→double-jump still works.
+
+---
+
+## RESUME HERE — next session (written 2026-10-03)
+
+**Branch:** `passthrough-live`. Latest commit `18501c1`. Both games were **closed** at the end of the
+session; nothing is left running.
+
+**Working end-to-end today (all human-verified unless noted):**
+input round-trip (S0) → terrain mirror on CU's real block grid (S1 + real-run fix) → CU puppet (S2) →
+seams/watchdogs/moveset (S3) → **pogo off CU entities** (S4 P1) → **Hornet damages CU actors** (S4 P2) →
+**ground jump / double jump fixed** (S4). Real-run fall-through is fixed.
+
+**Exact run recipe:**
+1. Launch CU (`um win launch --steam 4576510`) and Silksong (`--steam 1030300`).
+2. CU: content warning → Ctrl; `F9` tutorial → `F8` sandbox (or `F10` for a real run).
+3. Silksong: START GAME → profile 1. In gameplay press **F4** to apply the mirror.
+4. Play in CU. **F7** in CU spawns a pogo dummy below the player. CU's console (backquote) `spawn
+   <id>` (e.g. `shadecrawler`) spawns real actors; slash/pogo them.
+5. **F3** in Silksong restores vanilla terrain. Watchdogs auto-release both ways.
+- Automated `um win drive`: plain VKs work; `scanmode` only for the CU content-warning Ctrl. Synthetic
+  jump timing is unreliable — prefer the human for jump verification.
+
+**Immediate next steps (in priority order):**
+1. **Actor → Hornet damage** (the missing half of phase 2). Plan in `S4-SCOPE.md`: give each CU entity
+   proxy a `DamageHero` (hazardType from CU, `damageDealt` from CU) so Hornet's own `HeroBox` trigger
+   calls `HeroController.TakeDamage` with native i-frames/knockback; or send a `HeroDamaged` event. Add a
+   CU→Silk flag for "contact damage". Verify by letting a CU enemy/spike hit her.
+2. **Nail damage instead of fixed 5.** `ProxyRelay` hardcodes `HitDamage = 5f`; read Hornet's real nail
+   damage (see `HeroController`/`PlayerData` nail damage / `DamageEnemies`) and send that.
+3. **Blank-slate visual passthrough + scale** (human-deferred). `S4-SCOPE.md` §visual: dedicated capture
+   camera culling *only* Hornet's layers (Player/Attack/Particle/Hero Only) with alpha-0 clear; lighting
+   is the known unknown (earlier offscreen camera rendered dark). Scale: fix the capture PPU from Hornet's
+   height and derive CU's display scale from `k` (drop the manual `Scale`/`Ppu`).
+4. Optional polish: pogo/hit FX feedback (`Bounce(id)` event), wall-cling test (needs CU walls), increase
+   entity stream radius/size if needed.
+
+**Gotchas a new session must know:**
+- The shared protocol is at **`Version = 8`** (`shared/PassthroughProtocol.cs`); both plugins compile it,
+  so bump it whenever the layout changes. Region order: Header, CuState, FrameMeta, Pixels, Input,
+  Terrain (header holds the mapping anchor), PlayerState, Entities, Events.
+- **Entity ids:** real = `GetInstanceID() & 0xFFFFFF` (≥0); **debug dummies use negative ids**
+  (`-(i+1)`). Do not reintroduce an `id >= 9000` style check.
+- **Mapping origin** is CU ground-contact ↔ Hornet feet (`_cuOrigin`/`_silkOrigin` stored in
+  `TerrainMirror`); keep it consistent for terrain, entities, and the puppet.
+- Diagnostics currently enabled: Silksong state line every 30 frames (incl. `gnd`), `POGO!` on
+  `DownspikeBounce`, `Hit entity <id>` relay, CU damage lines. Trim when done.
+- Every code change needs a **game restart** (BepInEx loads DLLs at startup). CU builds deploy to
+  `%STEAM_LIBRARY%\...\BepInEx\plugins\HornetInCasualties`; Silksong to
+  `%STEAM_DIR%\...\BepInEx\plugins\HornetExporter`.
+
