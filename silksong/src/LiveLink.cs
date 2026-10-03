@@ -76,8 +76,8 @@ namespace HornetExporter
             string live = _anim != null && _anim.CurrentClip != null ? _anim.CurrentClip.name : clip;
             int frame = _anim != null ? _anim.CurrentFrame : 0;
 
-            // Publish the isolated frame at ~half rate. Cheap dedicated-camera capture (no diff).
-            if ((_publishTick++ & 1) == 0)
+            // Publish every frame (cached diff capture) for smoother motion.
+            if (true)
             {
                 try
                 {
