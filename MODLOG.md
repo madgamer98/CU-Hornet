@@ -186,7 +186,21 @@ CU's player controller.
 - **Known issues:** the sandbox ragdoll oscillates so Hornet flips Idle↔Airborne; placement/scale need
   tuning (current Scale 0.8, Ppu 64); Fall/Turn not in the bake; live state link not yet wired.
 
+## Offline-first (chosen 2026-10-02)
+Human chose offline-first (option 1); keep the live state link as a fallback if complications pile up.
+- Baked an expanded set: **50 clips / 356 frames** (locomotion incl. Fall/Sprint/Turn/Walk, dash, slash/
+  needle, wall/mantle, bind, hurt/death). Baker now reads only a cropped region around Hornet (fast).
+  Re-copied into CU's `plugins\HornetInCasualties\hornet\` (`bake.json` + `frames/`).
+- CU clip mapping now: Idle / Run / Airborne (vy>1) / Fall (vy<-0.5). Verified standings in the sandbox
+  (`shots/hornet10*.png`): real Hornet upright, vanilla body hidden.
+- **Gotcha:** the baker wrote invalid JSON when a frame diffed to nothing (leading comma) — fixed with a
+  per-clip `firstFrame` flag; `tools/repair_bake.py` repairs an existing file. Effect clips (SlashEffect,
+  UpSlashEffect) diff to ~nothing because only the root body renderer is toggled.
+- **Color note:** diff alpha uses the composited pixel, so Hornet is tinted by the scene light and looks
+  washed (pink-ish cloak). Un-premultiplying against the background frame would fix it.
+- Silksong plugin version 0.0.5.
+
 ## Next
-- Tune placement/scale; bake Fall/Turn/Sprint; pick the clip from a stabler signal.
-- Wire the live link (Silksong streams current clip+frame or CU drives Silksong), or keep offline playback.
-- Then Hornet's moveset (Stage 2).
+- Tune Scale/Offset for CU; fix capture color (un-premultiply); bake any missing clips.
+- Drive the moveset (Stage 2): map CU actions to Slash/Dash/NeedleThrow, etc.
+- Optional: live state link.

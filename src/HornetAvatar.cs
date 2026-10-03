@@ -115,11 +115,15 @@ namespace HornetInCasualties
             float vx = _body.rb != null ? _body.rb.velocity.x : 0f;
 
             string clip;
-            if (!_body.grounded && Mathf.Abs(vy) > 2f)
+            if (!_body.grounded && vy > 1f)
             {
                 clip = "Airborne";
             }
-            else if (Mathf.Abs(vx) > 0.4f)
+            else if (!_body.grounded && vy < -0.5f)
+            {
+                clip = "Fall";
+            }
+            else if (Mathf.Abs(vx) > 0.5f)
             {
                 clip = "Run";
             }

@@ -17,7 +17,7 @@ namespace HornetExporter
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "dev.cuhornet.silksong.exporter";
-        public const string Version = "0.0.4";
+        public const string Version = "0.0.5";
 
         internal static ManualLogSource Log;
         private Harmony _harmony;
@@ -70,9 +70,21 @@ namespace HornetExporter
 
         private static readonly string[] DefaultClips =
         {
-            "Idle", "Turn", "Run", "Airborne", "Land", "HardLand", "Soft Land",
-            "Slash", "SlashAlt", "SlashEffect", "UpSlash", "DownSpike", "Dash",
-            "Wall Scramble", "BindCharge Ground", "Evade",
+            // locomotion
+            "Idle", "Idle To Run", "Idle To Run Short", "Run", "Run To Idle", "Turn", "Turn Quick", "Walk",
+            "Airborne", "Fall", "Land", "HardLand", "HardLand Quick", "Land to Run",
+            "Sprint", "Sprint Air", "Sprint Turn", "Super Jump Loop",
+            // dash
+            "Dash", "Dash Down", "Air Dash", "Dash Attack", "Dash Attack Antic", "Dash Attack Recover",
+            "Dash To Idle",
+            // melee / needle
+            "Slash", "SlashAlt", "Slash_Charged", "SlashEffect", "SlashEffectAlt", "UpSlash", "UpSlashEffect",
+            "DownSpike", "DownSpike Antic", "Downspike Recovery", "DownSlashEffect", "Wall Slash", "Recoil",
+            // wall / mantle
+            "Wall Slide", "Wall Cling", "Walljump", "Wall Scramble", "Wall Scramble Antic", "Mantle Cling",
+            // bind / utility
+            "BindCharge Ground", "BindBurst Ground", "BindCancel Ground", "Bind Silk",
+            "Hurt To Idle", "Idle Hurt", "Death",
         };
 
         private void DumpClips()
