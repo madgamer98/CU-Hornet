@@ -84,7 +84,7 @@ namespace HornetExporter
                     byte[] rgba;
                     int w, h;
                     float px, py, wx, wy;
-                    if (HornetCapture.CaptureIsolatedRgba(out rgba, out w, out h, out px, out py, out wx, out wy))
+                    if (HornetCapture.CaptureDiffRgba(out rgba, out w, out h, out px, out py, out wx, out wy))
                     {
                         _link.WriteFrame(rgba, w, h, px, py, wx, wy, hash);
                         if (!_capLogged)

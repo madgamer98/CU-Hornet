@@ -106,6 +106,118 @@ namespace HornetExporter
             return true;
         }
 
+        private static RenderTexture _liveRt;
+        private static Texture2D _rectTex;
+        private static int _rectW, _rectH;
+        private static Color32[] _bufA;
+        private static Color32[] _bufB;
+
+        /// <summary>
+        /// Cached main-camera diff capture: Hornet-visible vs Hornet-hidden, using the game's own
+        /// camera (so lighting is correct and the background cancels to transparent). Reuses all
+        /// buffers so it is safe to call repeatedly.
+        /// </summary>
+        public static bool CaptureDiffRgba(out byte[] rgba, out int width, out int height,
+            out float pivotX, out float pivotY, out float worldX, out float worldY)
+        {
+            rgba = null;
+            width = height = 0;
+            pivotX = pivotY = worldX = worldY = 0f;
+
+            HeroController hero = HeroController.instance;
+            Camera cam = MainCamera();
+            if (hero == null || cam == null)
+            {
+                return false;
+            }
+
+            int sw = Screen.width, sh = Screen.height;
+            if (_liveRt == null || _liveRt.width != sw || _liveRt.height != sh)
+            {
+                if (_liveRt != null)
+                {
+                    _liveRt.Release();
+                }
+                _liveRt = new RenderTexture(sw, sh, 24, RenderTextureFormat.ARGB32);
+                _liveRt.Create();
+            }
+
+            ScreenRect rect = ComputeRect(hero, cam);
+            if (_rectTex == null || _rectW != rect.w || _rectH != rect.h)
+            {
+                _rectTex = new Texture2D(rect.w, rect.h, TextureFormat.RGBA32, false);
+                _rectW = rect.w;
+                _rectH = rect.h;
+                _bufA = new Color32[rect.w * rect.h];
+                _bufB = new Color32[rect.w * rect.h];
+            }
+            RenderInto(cam, rect, _bufA);
+            SetBodyEnabled(hero, false);
+            RenderInto(cam, rect, _bufB);
+            SetBodyEnabled(hero, true);
+            cam.targetTexture = null;
+
+            int minX = rect.w, minY = rect.h, maxX = -1, maxY = -1;
+            for (int i = 0; i < rect.w * rect.h; i++)
+            {
+                Color32 a = _bufA[i];
+                Color32 b = _bufB[i];
+                int d = Mathf.Max(Mathf.Abs(a.r - b.r), Mathf.Max(Mathf.Abs(a.g - b.g), Mathf.Abs(a.b - b.b)));
+                if (d > 16)
+                {
+                    int x = i % rect.w;
+                    int y = i / rect.w;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+            if (maxX < 0)
+            {
+                return false;
+            }
+
+            int cw = maxX - minX + 1, ch = maxY - minY + 1;
+            rgba = new byte[cw * ch * 4];
+            int o = 0;
+            for (int y = 0; y < ch; y++)
+            {
+                for (int x = 0; x < cw; x++)
+                {
+                    int i = (minY + y) * rect.w + (minX + x);
+                    Color32 a = _bufA[i];
+                    Color32 b = _bufB[i];
+                    int d = Mathf.Max(Mathf.Abs(a.r - b.r), Mathf.Max(Mathf.Abs(a.g - b.g), Mathf.Abs(a.b - b.b)));
+                    rgba[o++] = a.r;
+                    rgba[o++] = a.g;
+                    rgba[o++] = a.b;
+                    rgba[o++] = (byte)Mathf.Min(255, d * 2);
+                }
+            }
+
+            Vector3 sp = cam.WorldToScreenPoint(hero.transform.position);
+            pivotX = ((sp.x - rect.x) - minX) / cw;
+            pivotY = ((sp.y - rect.y) - minY) / ch;
+            width = cw;
+            height = ch;
+            Vector3 p = hero.transform.position;
+            worldX = p.x;
+            worldY = p.y;
+            return true;
+        }
+
+        private static void RenderInto(Camera cam, ScreenRect rect, Color32[] buf)
+        {
+            cam.targetTexture = _liveRt;
+            cam.Render();
+            RenderTexture.active = _liveRt;
+            _rectTex.ReadPixels(new Rect(rect.x, rect.y, rect.w, rect.h), 0, 0);
+            _rectTex.Apply();
+            RenderTexture.active = null;
+            _rectTex.GetRawTextureData<Color32>().CopyTo(buf);
+        }
+
         /// <summary>Capture Hornet isolated and return raw RGBA32 bytes (bottom-up, Unity order).</summary>
         public static bool CaptureRgba(out byte[] rgba, out int width, out int height, out float pivotX,
             out float pivotY, out float worldX, out float worldY)
