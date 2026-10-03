@@ -79,6 +79,13 @@ namespace HornetExporter
                 _heroCol = hero.GetComponent<Collider2D>();
             }
 
+            // While on mirrored terrain, force the cached ground probe so the FSM keeps a correct
+            // onGround state (otherwise the first jump is treated as the air/double jump).
+            if (TerrainMirror.Active)
+            {
+                hero.CheckTouchingGround(true);
+            }
+
             // S2: refresh the terrain proxy from the host window, then publish Hornet's state mapped
             // back into CU coordinates so the host can puppet its body/camera to her.
             TerrainMirror.Poll(_link);
@@ -108,6 +115,7 @@ namespace HornetExporter
                 Plugin.Log.LogInfo("LiveLink state: clip=" + clip + " vel=(" + v.x.ToString("0.0") +
                                    "," + v.y.ToString("0.0") + ") pos=" + hero.transform.position.x.ToString("0.0") +
                                    "," + hero.transform.position.y.ToString("0.0") +
+                                   " gnd=" + hero.CheckTouchingGround() +
                                    " in=0x" + InjectedButtons.ToString("X"));
             }
 

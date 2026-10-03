@@ -375,7 +375,7 @@ namespace HornetInCasualties
                     continue;
                 }
                 Vector3 p = d.transform.position;
-                AddEnt(ref count, 9000 + i, p.x, p.y, 1.2f, 1.2f, 100f, 100f,
+                AddEnt(ref count, -(i + 1), p.x, p.y, 1.2f, 1.2f, 100f, 100f,
                     Proto.EntFlagBounceable | Proto.EntFlagAlive);
             }
 
@@ -450,6 +450,20 @@ namespace HornetInCasualties
             }
         }
 
+        private BuildingEntity FindEntityById(int id)
+        {
+            BuildingEntity[] all = UnityEngine.Object.FindObjectsByType<BuildingEntity>(FindObjectsSortMode.None);
+            for (int i = 0; i < all.Length; i++)
+            {
+                BuildingEntity b = all[i];
+                if (b != null && (b.GetInstanceID() & 0xFFFFFF) == id)
+                {
+                    return b;
+                }
+            }
+            return null;
+        }
+
         private void PruneEntityMap()
         {
             _deadIds.Clear();
@@ -468,15 +482,15 @@ namespace HornetInCasualties
 
         private void ApplyHit(int id, float damage)
         {
-            if (id >= 9000)
+            if (id < 0)
             {
-                int di = id - 9000;
+                int di = -id - 1;
                 if (di < 0 || di >= _dummyHp.Count)
                 {
                     return;
                 }
                 _dummyHp[di] -= damage;
-                Plugin.Log.LogInfo("Dummy " + id + " hit for " + damage + " -> hp " + _dummyHp[di]);
+                Plugin.Log.LogInfo("Dummy " + di + " hit for " + damage + " -> hp " + _dummyHp[di]);
                 if (_dummyHp[di] <= 0f && di < _dummies.Count && _dummies[di] != null)
                 {
                     UnityEngine.Object.Destroy(_dummies[di]);
@@ -485,11 +499,26 @@ namespace HornetInCasualties
             }
 
             BuildingEntity be;
-            if (_entityById.TryGetValue(id, out be) && be != null)
+            if (!_entityById.TryGetValue(id, out be) || be == null)
+            {
+                be = FindEntityById(id);
+            }
+            if (be != null)
             {
                 be.health -= damage;
-                WorldGeneration.CreateDamageNumber(be.transform.position, Mathf.RoundToInt(damage));
                 Plugin.Log.LogInfo("Entity " + id + " hit for " + damage + " -> hp " + be.health);
+                try
+                {
+                    WorldGeneration.CreateDamageNumber(be.transform.position, Mathf.RoundToInt(damage));
+                }
+                catch (System.Exception e)
+                {
+                    Plugin.Log.LogError("damage number failed: " + e.Message);
+                }
+            }
+            else
+            {
+                Plugin.Log.LogInfo("Entity " + id + " hit but not found live");
             }
         }
 

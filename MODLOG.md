@@ -489,3 +489,13 @@ Protocol v8 adds an **`Events` ring** (Silksong -> CU): single writer/reader, mo
   Real-entity damage is the same code path as the dummy; re-verify with a console-spawned enemy.
 - **Note:** damage is a fixed 5 for now; reading Hornet's real nail damage comes later. No actor->Hornet
   damage yet (next slice).
+- **Real-entity damage (2026-10-03, VERIFIED):** the first cut used dummy ids `9000+`, but real instance
+  ids (masked to 24 bits) are ~16M — so `id >= 9000` **swallowed every real hit** into the dummy branch
+  (index out of range → silent return). Dummies now use **negative ids** (`-(i+1)`); `ApplyHit` treats
+  `id < 0` as a dummy. Verified by spawning a `shadecrawler` via CU's console and slashing it:
+  `Entity 16736012 hit for 5 -> hp 1.25 -> -3.75` (killed), and `Entity 16759044 -> hp 99990`.
+- **Jump refresh (attempt):** Hornet's ground jump was being treated as the air/double jump on the mirror.
+  Ground-layer `OnCollisionEnter2D` **does** fire on the proxy boxes (confirmed), so the likely cause is
+  HK's cached ground probe (`TouchGroundResult` only re-runs when the hero moves). While the mirror is
+  active, `LiveLink.Update` now forces `hero.CheckTouchingGround(true)` each frame (`gnd=True` observed).
+  Needs a human jump test to confirm.
