@@ -179,6 +179,10 @@ namespace HornetExporter
             }
 
             int cw = maxX - minX + 1, ch = maxY - minY + 1;
+            if (cw > 320 || ch > 320)
+            {
+                return false; // a bad diff (whole-screen change); skip this frame
+            }
             rgba = new byte[cw * ch * 4];
             int o = 0;
             for (int y = 0; y < ch; y++)
