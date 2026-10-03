@@ -99,21 +99,27 @@ namespace HornetInCasualties
             }
         }
 
-        // CU's ragdoll `grounded` flag is unreliable; use a feet-box test instead.
+        // CU's ragdoll `grounded` flag is unreliable, so combine it with a feet-box test and add
+        // hysteresis: stay "grounded" briefly after the last contact to stop clip flapping.
         private bool Grounded(float vy)
         {
-            if (_body.col == null)
+            bool raw = _body.grounded;
+            if (!raw && _body.col != null)
             {
-                return _body.grounded;
+                Vector2 size = new Vector2(Mathf.Max(_body.col.size.x * 0.9f, 0.3f), 0.22f);
+                Vector2 pos = (Vector2)_body.transform.position + _body.col.offset + Vector2.down * 0.06f;
+                raw = Physics2D.OverlapBox(pos, size, 0f, LayerMask.GetMask("Ground")) != null;
             }
-            if (Mathf.Abs(vy) > 0.6f)
+            if (raw)
             {
-                return false;
+                _lastGroundedTime = Time.time;
+                return true;
             }
-            Vector2 size = new Vector2(Mathf.Max(_body.col.size.x * 0.9f, 0.3f), 0.22f);
-            Vector2 pos = (Vector2)_body.transform.position + _body.col.offset + Vector2.down * 0.06f;
-            return Physics2D.OverlapBox(pos, size, 0f, LayerMask.GetMask("Ground")) != null;
+            // Grace window, unless clearly falling fast.
+            return Time.time - _lastGroundedTime < 0.25f && vy > -3f;
         }
+
+        private float _lastGroundedTime;
 
         // Hide the vanilla experiment's sprites the same way the baked port did.
         private void HideVanillaBody()
