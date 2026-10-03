@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HornetExporter</AssemblyName>
+    <RootNamespace>HornetExporter</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Version>0.0.1</Version>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <NoWarn>$(NoWarn);CS0436;CS0618;CS0649</NoWarn>
+  </PropertyGroup>
+
+  <Import Project="SilksongPaths.props" Condition="Exists('SilksongPaths.props')" />
+
+  <PropertyGroup>
+    <SilksongDir Condition="'$(SilksongDir)' == ''">%SILKSONG_DIR%</SilksongDir>
+    <SsManaged Condition="'$(SsManaged)' == ''">$(SilksongDir)\Hollow Knight Silksong_Data\Managed</SsManaged>
+    <SsBepInExCore Condition="'$(SsBepInExCore)' == ''">$(SilksongDir)\BepInEx\core</SsBepInExCore>
+    <SsPlugins Condition="'$(SsPlugins)' == ''">$(SilksongDir)\BepInEx\plugins\HornetExporter</SsPlugins>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(SsBepInExCore)\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(SsBepInExCore)\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(SsManaged)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TeamCherry.TK2D"><HintPath>$(SsManaged)\TeamCherry.TK2D.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(SsManaged)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(SsManaged)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AnimationModule"><HintPath>$(SsManaged)\UnityEngine.AnimationModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(SsManaged)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.Physics2DModule"><HintPath>$(SsManaged)\UnityEngine.Physics2DModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(SsManaged)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <Target Name="DeployToSilksong" AfterTargets="Build" Condition="'$(Deploy)' != 'false'">
+    <MakeDir Directories="$(SsPlugins)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SsPlugins)" />
+    <Message Importance="high" Text="Deployed $(TargetFileName) -> $(SsPlugins)" />
+  </Target>
+
+</Project>

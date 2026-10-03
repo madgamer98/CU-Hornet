@@ -156,6 +156,18 @@ CU's player controller.
   RenderTexture and writes PNG + pivot. Unity handles rotation/material; CU then uses SpriteRenderer.
   This matches the "port the rendering" idea without reimplementing MeshRenderer.
 
+## Route decision (2026-10-02, updated)
+- Human chose **live passthrough** (Silksong is the Hornet source). Rationale: both sides are 2D, so
+  there is **no depth/3D compositing** (the hard part of GTA/SkyCraft is absent). Silksong's 3D capability
+  is irrelevant to Hornet's tk2d sprites. Cost is frame acquisition + a second process.
+- Human approved installing a BepInEx plugin into Silksong.
+- Plan: Silksong-side plugin renders Hornet (isolated) to a RenderTexture and can (a) dump PNGs (fallback /
+  accuracy check) and (b) stream frames + state to CU over shared memory. CU draws Hornet at the player.
+- **Silksong plugin scaffolded + built + deployed:** `silksong/` → `HornetExporter.dll` in
+  `...\Hollow Knight Silksong\BepInEx\plugins\HornetExporter\`. F7 logs Hornet hierarchy + tk2d clips;
+  F8 renders Hornet to `hornet_capture.png`. Camera isolates a `HornetCapture` layer (falls back to the
+  whole scene if the layer doesn't exist — may need creating).
+
 ## Next
-- Decide on the Silksong-side frame exporter (recommended) vs continuing to reverse tk2d's atlas packing.
+- Run Silksong, reach gameplay, F7 to inspect and F8 to capture. Then wire the live link into CU.
 - Then Hornet's moveset (Stage 2).
