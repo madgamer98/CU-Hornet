@@ -17,7 +17,7 @@ namespace HornetExporter
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "dev.cuhornet.silksong.exporter";
-        public const string Version = "0.0.2";
+        public const string Version = "0.0.3";
 
         internal static ManualLogSource Log;
         private Harmony _harmony;
@@ -56,6 +56,74 @@ namespace HornetExporter
             {
                 HornetCapture.CaptureToFile();
             }
+
+            if (Input.GetKeyDown(KeyCode.F6))
+            {
+                DumpClips();
+            }
+        }
+
+        private void DumpClips()
+        {
+            HeroController hero = HeroController.instance;
+            if (hero == null)
+            {
+                Plugin.Log.LogInfo("F6: no HeroController.");
+                return;
+            }
+            var animator = hero.GetComponentInChildren<tk2dSpriteAnimator>();
+            if (animator == null || animator.Library == null)
+            {
+                Plugin.Log.LogInfo("F6: no tk2d library.");
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("{\"clips\":[");
+            tk2dSpriteAnimationClip[] clips = animator.Library.clips;
+            for (int i = 0; i < clips.Length; i++)
+            {
+                if (i > 0)
+                {
+                    sb.Append(',');
+                }
+                tk2dSpriteAnimationClip c = clips[i];
+                sb.Append("{\"name\":\"").Append(Escape(c.name)).Append("\",\"fps\":").Append(c.fps)
+                  .Append(",\"frames\":[");
+                if (c.frames != null)
+                {
+                    for (int f = 0; f < c.frames.Length; f++)
+                    {
+                        if (f > 0)
+                        {
+                            sb.Append(',');
+                        }
+                        tk2dSpriteAnimationFrame fr = c.frames[f];
+                        string coll = fr.spriteCollection != null ? fr.spriteCollection.spriteCollectionName : null;
+                        string spr = "?";
+                        if (fr.spriteCollection != null && fr.spriteCollection.spriteDefinitions != null &&
+                            fr.spriteId >= 0 && fr.spriteId < fr.spriteCollection.spriteDefinitions.Length)
+                        {
+                            spr = fr.spriteCollection.spriteDefinitions[fr.spriteId].name;
+                        }
+                        sb.Append("{\"c\":\"").Append(Escape(coll)).Append("\",\"i\":").Append(fr.spriteId)
+                          .Append(",\"n\":\"").Append(Escape(spr)).Append("\"}");
+                    }
+                }
+                sb.Append("]}");
+            }
+            sb.Append("]}");
+
+            string dir = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "HornetExporter");
+            System.IO.Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, "clips.json");
+            System.IO.File.WriteAllText(path, sb.ToString());
+            Plugin.Log.LogInfo("F6: wrote " + path + " (" + clips.Length + " clips)");
+        }
+
+        private static string Escape(string s)
+        {
+            return string.IsNullOrEmpty(s) ? "" : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         private void DumpHornet()

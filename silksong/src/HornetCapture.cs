@@ -59,7 +59,7 @@ namespace HornetExporter
                 Color32 a = withHero[i];
                 Color32 b = without[i];
                 int d = Mathf.Max(Mathf.Abs(a.r - b.r), Mathf.Max(Mathf.Abs(a.g - b.g), Mathf.Abs(a.b - b.b)));
-                if (d > 8)
+                if (d > 16)
                 {
                     img[i] = new Color32(a.r, a.g, a.b, (byte)Mathf.Min(255, d * 2));
                     int x = i % w;
@@ -119,8 +119,10 @@ namespace HornetExporter
 
         private static List<Renderer> VisibleRenderers(HeroController hero)
         {
+            // Only Hornet's own body renderer sits on the hero root; her children are
+            // effects/lighting (disabling those changes the whole scene).
             var list = new List<Renderer>();
-            foreach (Renderer r in hero.GetComponentsInChildren<Renderer>(true))
+            foreach (Renderer r in hero.GetComponents<Renderer>())
             {
                 if (r is SpriteRenderer || r.GetType().Name == "MeshRenderer")
                 {
