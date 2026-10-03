@@ -472,17 +472,20 @@ maxHp, flags`), revisioned.
 - CU logs the terrain anchor/count on change and the puppet target every 0.5 s; Silksong's state log now
   includes Y, so any future drift is directly visible.
 
-## S4 phase 2 — Hornet → actor damage (2026-10-03, built, needs in-game verify)
+## S4 phase 2 — Hornet → actor damage (2026-10-03, VERIFIED dummy path)
 Protocol v8 adds an **`Events` ring** (Silksong -> CU): single writer/reader, monotonic index, records
 `(type, id, a, b, c)`, `EventHitEntity` = `a` damage.
 - **Silksong (`silksong/src/ProxyRelay.cs`):** each entity proxy gets a relay. When Hornet's attack
   collider (layer 17) enters/stays, it pushes `HitEntity(id, HitDamage=5)`, debounced 0.3 s so one swing
   is one hit.
 - **CU (`src/LiveLink.cs`):** `DrainEvents()` each frame applies hits. Debug dummies (id 9000+) lose
-  tracked HP and pop at 0; real actors are looked up by streamed id (`GetInstanceID() & 0xFFFFFF`,
-  refreshed each entity publish) and take `be.health -= damage` plus
-  `WorldGeneration.CreateDamageNumber`. Logs `Entity/Dummy <id> hit for N -> hp H`.
+  tracked HP and pop at 0; real actors are looked up by streamed id (`GetInstanceID() & 0xFFFFFF`) and
+  take `be.health -= damage` plus `WorldGeneration.CreateDamageNumber`. Logs
+  `Entity/Dummy <id> hit for N -> hp H`.
+- **Verified (sandbox, down-slash on the F7 dummy):** Silksong `Hit entity 9000 for 5`; CU
+  `Dummy 9000 hit for 5 -> hp 95`. A real streamed entity (`16759678`) also registered a hit in Silksong.
+- **Fix after first test:** the id map was cleared every entity publish, so a real-entity event arriving
+  outside the window was dropped. Now the map is persistent and pruned of dead entries (`PruneEntityMap`).
+  Real-entity damage is the same code path as the dummy; re-verify with a console-spawned enemy.
 - **Note:** damage is a fixed 5 for now; reading Hornet's real nail damage comes later. No actor->Hornet
-  damage yet (that's the next slice).
-- **Verify:** F4, then hit a pogo dummy (F7) or a console-spawned enemy; CU log should show the damage
-  line and the hovered `fullNameDisplay`/HP drop.
+  damage yet (next slice).

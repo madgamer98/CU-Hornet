@@ -40,6 +40,7 @@ namespace HornetInCasualties
         private readonly List<GameObject> _dummies = new List<GameObject>();
         private readonly List<float> _dummyHp = new List<float>();
         private readonly Dictionary<int, BuildingEntity> _entityById = new Dictionary<int, BuildingEntity>();
+        private readonly List<int> _deadIds = new List<int>();
         private Sprite _dummySprite;
         private int _entRev;
         private int _eventReadIndex;
@@ -379,7 +380,7 @@ namespace HornetInCasualties
             }
 
             Vector2 c = _body.transform.position;
-            _entityById.Clear();
+            PruneEntityMap();
             int n = Physics2D.OverlapCircleNonAlloc(c, 30f, _entHits, ~0);
             for (int i = 0; i < n && count < Proto.MaxEntities; i++)
             {
@@ -446,6 +447,22 @@ namespace HornetInCasualties
                     ApplyHit(id, a);
                 }
                 _eventReadIndex++;
+            }
+        }
+
+        private void PruneEntityMap()
+        {
+            _deadIds.Clear();
+            foreach (KeyValuePair<int, BuildingEntity> kv in _entityById)
+            {
+                if (kv.Value == null)
+                {
+                    _deadIds.Add(kv.Key);
+                }
+            }
+            for (int i = 0; i < _deadIds.Count; i++)
+            {
+                _entityById.Remove(_deadIds[i]);
             }
         }
 
