@@ -113,7 +113,11 @@ namespace HornetExporter
         private static Color32[] _bufB;
 
         // ---- Blank-slate capture (S4 visual): main camera, narrowed culling mask, alpha-0 clear ----
-        private const int BlankCrop = 320; // fixed frame size so CU never reallocates its texture
+        // Fixed frame size so CU never reallocates its texture. S5 task 1: raised 320 -> 480 (+50%,
+        // the human's ask) and then -> 640 because a side slash still reached the 480 edge; the extra
+        // ring is transparent. Protocol v9 double-buffers the pixels because a crop this big tears
+        // under the old single-buffer seqlock.
+        private const int BlankCrop = 640;
         // S5 task 1: HeroAttack (PhysLayers.HERO_ATTACK). Hornet's slash arcs live here, separate
         // from her body on Player(9). They are kept visible in the blank render (see HideEffects).
         private const int AttackLayer = 17;
@@ -124,6 +128,7 @@ namespace HornetExporter
         private static byte[] _blankRgba;
         private static int _heroMask;
         private static bool _heroMaskSet;
+        private static bool _edgeLogged;
         private static HeroController _cacheHero;
         private static readonly List<Renderer> _bodyCache = new List<Renderer>();
         private static readonly List<Renderer> _effectCache = new List<Renderer>();
@@ -166,9 +171,10 @@ namespace HornetExporter
             }
 
             // Center the camera on Hornet for this render. The crop comes from a screen-sized RT and
-            // is clamped to the screen, so when she was near the edge of Silksong's view the crop
-            // cut her off. Temporarily recentring (restored in finally) avoids that. Slash arcs are
-            // close enough to fit the fixed crop (S5 task 1 keeps the body framing unchanged).
+            // is clamped to the screen, so recentring also avoids her being cut off at the view edge.
+            // Do NOT try to frame the slash arc here: the hero carries dozens of attack renderers
+            // (many active but far away), and any union recentre moves the camera off her entirely -
+            // the capture then returns no frame. The crop is simply made big enough instead.
             Vector3 prevCamPos = cam.transform.position;
             cam.transform.position = new Vector3(hero.transform.position.x, hero.transform.position.y,
                                                  prevCamPos.z);
@@ -228,18 +234,36 @@ namespace HornetExporter
 
             _blankTex.GetRawTextureData<Color32>().CopyTo(_blankBuf);
 
-            bool any = false;
+            // Alpha bounds: lets us still return a frame when there is content, and detect when the
+            // slash crescent is being clipped by the fixed crop (idle Hornet sits well inside it).
+            int minX = cw, minY = ch, maxX = -1, maxY = -1;
             for (int i = 0; i < _blankBuf.Length; i++)
             {
                 if (_blankBuf[i].a > 8)
                 {
-                    any = true;
-                    break;
+                    int x = i % cw;
+                    int y = i / cw;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
                 }
             }
-            if (!any)
+            if (maxX < 0)
             {
                 return false;
+            }
+            bool touchesEdge = minX <= 1 || minY <= 1 || maxX >= cw - 2 || maxY >= ch - 2;
+            if (touchesEdge && !_edgeLogged)
+            {
+                _edgeLogged = true;
+                Plugin.Log.LogWarning("HornetCapture: content reaches the crop edge (bbox " + minX + "," +
+                                      minY + ".." + maxX + "," + maxY + " of " + cw + "x" + ch +
+                                      ") - a slash arc may be clipped; raise BlankCrop.");
+            }
+            else if (!touchesEdge)
+            {
+                _edgeLogged = false;
             }
 
             int o = 0;

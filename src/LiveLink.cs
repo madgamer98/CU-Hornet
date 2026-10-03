@@ -804,7 +804,7 @@ namespace HornetInCasualties
 
         private void ApplyFrame(int w, int h, float px, float py)
         {
-            if (w > 320 || h > 320)
+            if (w > Proto.MaxWidth || h > Proto.MaxHeight)
             {
                 return; // guard against a bad capture
             }

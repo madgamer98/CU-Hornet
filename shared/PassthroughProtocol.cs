@@ -15,19 +15,24 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 8;
+        public const int Version = 9;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
         public const int CuStateOffset = 64;
         public const int CuStateSize = 64;
         public const int FrameMetaOffset = 128;
-        public const int FrameMetaSize = 64;
-        public const int PixelsOffset = 192;
-        public const int MaxWidth = 384;
-        public const int MaxHeight = 384;
-        public const int PixelsSize = MaxWidth * MaxHeight * 4;
-        public const int InputOffset = PixelsOffset + PixelsSize;
+        public const int FrameMetaSize = 80;
+        public const int PixelsOffset = FrameMetaOffset + FrameMetaSize; // 208
+        public const int MaxWidth = 640;
+        public const int MaxHeight = 640;
+        // v9: the Hornet frame is double-buffered. A 320-384px RGBA payload is too big to copy inside
+        // the meta seqlock (the writer is mid-copy almost every reader tick, so the reader rejects the
+        // frame - S4 lesson 3). The writer renders into the off buffer and only flips an index under a
+        // short lock, so the reader always sees a complete buffer.
+        public const int PixelsBuffers = 2;
+        public const int PixelsSize = MaxWidth * MaxHeight * 4; // one buffer
+        public const int InputOffset = PixelsOffset + PixelsSize * PixelsBuffers;
         public const int InputSize = 32;
         public const int TerrainOffset = InputOffset + InputSize;
         public const int TerrainHeaderSize = 32;
@@ -101,6 +106,7 @@ namespace HornetPassthrough
         public const int FO_Facing = 40;     // +1 right, -1 left
         public const int FO_HasPixels = 44;  // 1 when the pixel buffer is valid
         public const int FO_Name = 48;       // up to 16 ASCII chars (clip name), NUL padded
+        public const int FO_BufIndex = 64;   // int, which pixel buffer holds the committed frame (v9)
 
         // Input (CU -> Silksong): raw buttons + a small sequence counter.
         public const int IO_Buttons = 0;     // int bitfield of Btn* above
@@ -443,13 +449,22 @@ namespace HornetPassthrough
         public void WriteFrame(byte[] pixels, int width, int height, float pivotX, float pivotY,
             float worldX, float worldY, int clipHash)
         {
-            int seq = ReadInt(Proto.FrameMetaOffset + Proto.FO_Seq);
-            WriteInt(Proto.FrameMetaOffset + Proto.FO_Seq, seq + 1); // odd = writing
+            // v9 double buffer: write the pixels into the off buffer first (a reader only ever reads the
+            // committed one), then publish the metadata and flip the index under a short seqlock. The
+            // big pixel copy stays outside the lock, so a reader is never rejected mid-copy.
+            int current = ReadInt(Proto.FrameMetaOffset + Proto.FO_BufIndex);
+            if (current < 0 || current >= Proto.PixelsBuffers)
+            {
+                current = 0;
+            }
+            int next = (current + 1) % Proto.PixelsBuffers;
             if (pixels != null)
             {
                 int n = System.Math.Min(pixels.Length, Proto.PixelsSize);
-                _view.WriteArray(Proto.PixelsOffset, pixels, 0, n);
+                _view.WriteArray(Proto.PixelsOffset + next * Proto.PixelsSize, pixels, 0, n);
             }
+            int seq = ReadInt(Proto.FrameMetaOffset + Proto.FO_Seq);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_Seq, seq + 1); // odd = writing
             WriteInt(Proto.FrameMetaOffset + Proto.FO_HasPixels, pixels != null ? 1 : 0);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_Width, width);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_Height, height);
@@ -459,6 +474,7 @@ namespace HornetPassthrough
             WriteFloat(Proto.FrameMetaOffset + Proto.FO_WorldY, worldY);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_ClipHash, clipHash);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_FrameId, ReadInt(Proto.FrameMetaOffset + Proto.FO_FrameId) + 1);
+            WriteInt(Proto.FrameMetaOffset + Proto.FO_BufIndex, next);
             WriteInt(Proto.FrameMetaOffset + Proto.FO_Seq, seq + 2); // even = stable
         }
 
@@ -532,10 +548,15 @@ namespace HornetPassthrough
             pivotY = ReadFloat(Proto.FrameMetaOffset + Proto.FO_PivotY);
             worldX = ReadFloat(Proto.FrameMetaOffset + Proto.FO_WorldX);
             worldY = ReadFloat(Proto.FrameMetaOffset + Proto.FO_WorldY);
+            int bufIndex = ReadInt(Proto.FrameMetaOffset + Proto.FO_BufIndex);
+            if (bufIndex < 0 || bufIndex >= Proto.PixelsBuffers)
+            {
+                bufIndex = 0;
+            }
             int n = System.Math.Min(width * height * 4, Proto.PixelsSize);
             if (n > 0)
             {
-                _view.ReadArray(Proto.PixelsOffset, pixels, 0, n);
+                _view.ReadArray(Proto.PixelsOffset + bufIndex * Proto.PixelsSize, pixels, 0, n);
             }
             int seq2 = ReadInt(Proto.FrameMetaOffset + Proto.FO_Seq);
             if (seq1 != seq2)

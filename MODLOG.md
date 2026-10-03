@@ -652,3 +652,34 @@ Hornet (the NailSlash `MeshRenderer` is a child of the hero). Layer 17 is `HERO_
   `SlashAlt`/`Slash` from the forwarded `BtnAttack`, and CU frames show the full white crescent around
   her only during the swing (needle/idle before and after). Fits the 320 crop, no clipping.
 - Builds clean, both plugins deployed.
+
+## S5 task 1 follow-up - 640 crop + double-buffered Hornet pixels (2026-10-03, VERIFIED)
+
+The 320 crop still clipped the slash crescent on the human's display, so the fixed crop was raised
+**320 -> 480 (+50%)** and then **-> 640**, because at 480 a side slash still reached the edge. The
+extra ring around Hornet is transparent (she renders the same pixel size) and the camera stays on her
+transform, so CU's display scale/placement is unchanged.
+
+A 640^2 RGBA frame is ~1.6 MB, past the S4 lesson-3 tearing threshold, so **protocol v9 double-buffers
+the Hornet pixels**:
+- `shared/PassthroughProtocol.cs`: `Version 9`; `FrameMetaSize` 64 -> 80; `FO_BufIndex = 64`;
+  `PixelsOffset` follows FrameMeta (now 208); `MaxWidth/Height = 640`; `PixelsSize` is one buffer and
+  `InputOffset = PixelsOffset + PixelsSize * 2` (`PixelsBuffers = 2`).
+- `WriteFrame` writes pixels into the **off** buffer *outside* the meta lock, then publishes the
+  metadata and flips `FO_BufIndex` under a short seqlock. The reader (`ReadFrame`) reads the committed
+  buffer, then re-checks the seq. The big copy no longer sits inside the lock, so the reader is not
+  rejected mid-copy.
+- `src/LiveLink.cs` (CU): frame guard uses `Proto.MaxWidth/MaxHeight` instead of a hard 320.
+- `silksong/src/HornetCapture.cs`: `BlankCrop = 640`; new **edge diagnostic** logs a warning whenever
+  alpha content reaches within 2px of the crop edge (idle Hornet sits deep inside, so only a slash can
+  trigger it).
+
+**Do NOT try to auto-frame the arc.** Two attempts to recentre the camera on the union of body + layer
+17 renderers failed: Hornet carries dozens of Slash/crest variants as children, and even filtering to
+`enabled && activeInHierarchy` still left attack renderers pulling the union off her, so the capture
+returned no frame (`capture returned no frame xN`). A big fixed crop centred on her transform is the
+reliable fix.
+
+**Verified:** restarted both games; drove left/right/up/down slashes. Silksong logs
+`publishing isolated frames 640x640 (blank)` with no `no frame` and **no `crop edge` warning**; CU logs
+`received live Hornet frame 640x640`, `w=640 hasPx=1`, `fid` advancing, no size rejects.
