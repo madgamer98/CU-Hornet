@@ -494,12 +494,10 @@ Protocol v8 adds an **`Events` ring** (Silksong -> CU): single writer/reader, mo
   (index out of range → silent return). Dummies now use **negative ids** (`-(i+1)`); `ApplyHit` treats
   `id < 0` as a dummy. Verified by spawning a `shadecrawler` via CU's console and slashing it:
   `Entity 16736012 hit for 5 -> hp 1.25 -> -3.75` (killed), and `Entity 16759044 -> hp 99990`.
-- **Jump refresh (2026-10-03, inconclusive / likely not a bug):** reported as "ground jump always
-  triggers the double jump". Investigation: Silksong has **no `Jump` clip** — Hornet's ground-jump
-  animation is literally named `Double Jump` (verified via `clips.json`). On *vanilla* terrain (mirror
-  off) a ground jump also plays `Double Jump`, and `hero.CanJump()` is true before and after, so the
-  ground jump refreshes normally. Landing `OnCollisionEnter2D` events **do** fire on the proxy boxes.
-  Kept two harmless safeguards: `LiveLink` forces `hero.CheckTouchingGround(true)` while the mirror is
-  active, and a prefix on `HeroController.OnCollisionEnter2D` forces the probe so the `HeroCtrl-Landed`
-  event isn't skipped by HK's cached ground check. Needs the human to clarify the exact symptom (e.g.
-  missing *air* double jump vs animation name).
+- **Jump fix (2026-10-03, VERIFIED):** with injected (held) input, the ground jump's `HeroJump` was
+  immediately followed by the held-button double-jump path, so the wing double jump fired on every jump
+  and the real double jump was consumed. Wall jumps were fine (different path). Fix: after a ground jump,
+  block `DoDoubleJump` until Jump has been **released** (`silksong/src/JumpGating.cs`; postfixes on
+  `HeroJump`/`HeroJump(bool)`/`HeroJumpNoEffect` clear the gate, `DoDoubleJump` prefix checks it, and
+  `InputInjector` re-arms on release). Wall jumps don't set the gate. Verified by the human: ground jump
+  is clean, a second press gives the wings, wall-jump→double-jump still works.

@@ -67,6 +67,12 @@ namespace HornetExporter
                 // Hornet's needle/harpoon throw is the SuperDash action in Silksong (QuickCast is the
                 // tool/spell button and produced an "AirSphere Attack" instead).
                 Commit(ha.SuperDash, b, Proto.BtnNeedle, updateTick, deltaTime);
+
+                // A fresh double jump requires releasing the button after the ground jump.
+                if (!ha.Jump.IsPressed)
+                {
+                    JumpGating.ReleasedSinceGroundJump = true;
+                }
             }
 
             private static void Commit(PlayerAction action, int buttons, int bit, ulong updateTick, float deltaTime)
