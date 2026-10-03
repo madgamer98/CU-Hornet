@@ -15,7 +15,7 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 5;
+        public const int Version = 7;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -30,8 +30,8 @@ namespace HornetPassthrough
         public const int InputOffset = PixelsOffset + PixelsSize;
         public const int InputSize = 32;
         public const int TerrainOffset = InputOffset + InputSize;
-        public const int TerrainHeaderSize = 16;
-        public const int MaxRects = 256;
+        public const int TerrainHeaderSize = 32;
+        public const int MaxRects = 2048;
         public const int TerrainRectsOffset = TerrainOffset + TerrainHeaderSize;
         public const int TerrainSize = TerrainHeaderSize + MaxRects * 16;
         public const int PlayerStateOffset = TerrainOffset + TerrainSize;
@@ -106,6 +106,8 @@ namespace HornetPassthrough
         public const int TH_Count = 4;
         public const int TH_PlayerHeight = 8; // float, CU player collider height (scale reference)
         public const int TH_Seq = 12;        // int seqlock
+        public const int TH_AnchorX = 16;    // float, CU mapping origin x = collider centre x
+        public const int TH_AnchorY = 20;    // float, CU mapping origin y = ground contact y
 
         // PlayerState (Silksong -> CU): Hornet's state mapped back into CU coordinates by the
         // fixed origin+scale captured when the terrain mirror was applied.
@@ -220,14 +222,17 @@ namespace HornetPassthrough
         }
 
         // ---- Terrain (CU -> Silksong) ----
-        /// <summary>Publish ground AABBs relative to (anchorX, anchorY), in CU units. rects is x,y,w,h per item.</summary>
-        public void WriteTerrain(float playerHeight, float[] rects, int count, int revision)
+        /// <summary>Publish ground AABBs in absolute CU units. rects is x,y,w,h per item. anchor is
+        /// the CU collider centre x and the ground-contact y, used as the fixed mapping origin.</summary>
+        public void WriteTerrain(float playerHeight, float anchorX, float anchorY, float[] rects, int count, int revision)
         {
             int seq = ReadInt(Proto.TerrainOffset + Proto.TH_Seq);
             WriteInt(Proto.TerrainOffset + Proto.TH_Seq, seq + 1);
             WriteInt(Proto.TerrainOffset + Proto.TH_Revision, revision);
             WriteInt(Proto.TerrainOffset + Proto.TH_Count, count);
             WriteFloat(Proto.TerrainOffset + Proto.TH_PlayerHeight, playerHeight);
+            WriteFloat(Proto.TerrainOffset + Proto.TH_AnchorX, anchorX);
+            WriteFloat(Proto.TerrainOffset + Proto.TH_AnchorY, anchorY);
 
             int n = System.Math.Min(count, Proto.MaxRects);
             for (int i = 0; i < n; i++)
@@ -243,11 +248,13 @@ namespace HornetPassthrough
 
         /// <summary>Read the terrain window. Returns true when a new revision was consumed.</summary>
         public bool ReadTerrain(float[] rects, out int count, out int revision, out float playerHeight,
-            ref int lastRevision)
+            out float anchorX, out float anchorY, ref int lastRevision)
         {
             count = 0;
             revision = ReadInt(Proto.TerrainOffset + Proto.TH_Revision);
             playerHeight = ReadFloat(Proto.TerrainOffset + Proto.TH_PlayerHeight);
+            anchorX = ReadFloat(Proto.TerrainOffset + Proto.TH_AnchorX);
+            anchorY = ReadFloat(Proto.TerrainOffset + Proto.TH_AnchorY);
             if (revision == lastRevision)
             {
                 return false;
@@ -259,6 +266,8 @@ namespace HornetPassthrough
             }
             count = ReadInt(Proto.TerrainOffset + Proto.TH_Count);
             playerHeight = ReadFloat(Proto.TerrainOffset + Proto.TH_PlayerHeight);
+            anchorX = ReadFloat(Proto.TerrainOffset + Proto.TH_AnchorX);
+            anchorY = ReadFloat(Proto.TerrainOffset + Proto.TH_AnchorY);
             int n = System.Math.Min(count, Proto.MaxRects);
             for (int i = 0; i < n; i++)
             {

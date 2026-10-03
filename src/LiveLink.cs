@@ -33,7 +33,6 @@ namespace HornetInCasualties
         private float _terrainTimer;
         private int _terrainRev;
         private readonly float[] _rectBuf = new float[Proto.MaxRects * 4];
-        private readonly Collider2D[] _overlapBuf = new Collider2D[Proto.MaxRects];
         private static readonly int GroundMask = LayerMask.GetMask("Ground");
 
         private readonly float[] _entBuf = new float[Proto.MaxEntities * Proto.EntityStrideFloats];
@@ -41,6 +40,7 @@ namespace HornetInCasualties
         private readonly List<GameObject> _dummies = new List<GameObject>();
         private Sprite _dummySprite;
         private int _entRev;
+        private float _puppetLogTimer;
 
         public void Init(Body body)
         {
@@ -112,6 +112,17 @@ namespace HornetInCasualties
                         EnablePuppet();
                     }
                     PuppetTo(hx, hy, hfacing);
+
+                    _puppetLogTimer -= Time.deltaTime;
+                    if (_puppetLogTimer <= 0f)
+                    {
+                        _puppetLogTimer = 0.5f;
+                        Vector3 bp = _body.transform.position;
+                        Vector3 bc = _body.col != null ? (Vector3)_body.col.bounds.center : bp;
+                        Plugin.Log.LogInfo("puppet: got=(" + hx.ToString("0.0") + "," + hy.ToString("0.0") +
+                                           ") body=(" + bp.x.ToString("0.0") + "," + bp.y.ToString("0.0") +
+                                           ") colCenter=(" + bc.x.ToString("0.0") + "," + bc.y.ToString("0.0") + ")");
+                    }
                 }
                 else if (Puppeting)
                 {
@@ -225,11 +236,14 @@ namespace HornetInCasualties
             {
                 return;
             }
-            Vector3 np = new Vector3(x, y, _body.transform.position.z);
+            // PlayerState carries the mapped collider centre; place the body so its collider centre lands there.
+            Vector2 off = _body.col != null ? _body.col.offset : Vector2.zero;
+            float bz = _body.transform.position.z;
+            Vector3 np = new Vector3(x - off.x, y - off.y, bz);
             _body.transform.position = np;
             if (_body.rb != null)
             {
-                _body.rb.position = new Vector2(x, y);
+                _body.rb.position = np;
             }
             if (facing != 0)
             {
@@ -253,8 +267,9 @@ namespace HornetInCasualties
         }
 
         /// <summary>
-        /// Collect ground colliders around the player as AABBs relative to the player's ground
-        /// contact, in CU units, and publish them. Silksong scales them and builds a proxy.
+        /// Sample CU's block grid around the player and publish solid rows as absolute AABBs (row
+        /// runs merged), plus the mapping anchor. Real-run ground is chunk tilemaps, so reading the
+        /// world blocks is exact — collider bounds there are 64x64 chunk AABBs and useless.
         /// </summary>
         private void PublishTerrain()
         {
@@ -262,11 +277,16 @@ namespace HornetInCasualties
             {
                 return;
             }
+            WorldGeneration w = WorldGeneration.world;
+            if (w == null)
+            {
+                return;
+            }
 
             Bounds cb = _body.col.bounds;
             Vector2 center = cb.center;
 
-            // Anchor at the ground directly under the player so the floor maps to the proxy's y=0.
+            // Anchor at the ground directly under the player (mapping origin / proxy y=0).
             float anchorY = cb.min.y;
             RaycastHit2D ground = Physics2D.Raycast(center, Vector2.down, cb.extents.y + 12f, GroundMask);
             if (ground.collider != null)
@@ -275,42 +295,62 @@ namespace HornetInCasualties
             }
             Vector2 anchor = new Vector2(center.x, anchorY);
 
-            const float half = 96f;
-            int n = Physics2D.OverlapBoxNonAlloc(anchor, new Vector2(half * 2f, half * 2f), 0f,
-                _overlapBuf, GroundMask);
-
-            float minX = anchor.x - half, minY = anchor.y - half;
-            float maxX = anchor.x + half, maxY = anchor.y + half;
+            const float half = 48f;
+            Vector2Int bmin = w.WorldToBlockPos(new Vector2(anchor.x - half, anchor.y - half));
+            Vector2Int bmax = w.WorldToBlockPos(new Vector2(anchor.x + half, anchor.y + half));
 
             int count = 0;
-            for (int i = 0; i < n && count < Proto.MaxRects; i++)
+            for (int by = bmin.y; by <= bmax.y && count < Proto.MaxRects; by++)
             {
-                Collider2D c = _overlapBuf[i];
-                if (c == null)
+                int runStart = -1;
+                for (int bx = bmin.x; bx <= bmax.x + 1; bx++)
                 {
-                    continue;
+                    bool solid = false;
+                    if (bx <= bmax.x)
+                    {
+                        BlockInfo info = w.GetBlockInfo(w.GetBlock(new Vector2Int(bx, by)));
+                        solid = info != null && info.health > 0f;
+                    }
+                    if (solid)
+                    {
+                        if (runStart < 0)
+                        {
+                            runStart = bx;
+                        }
+                    }
+                    else if (runStart >= 0)
+                    {
+                        Vector2 p0 = w.BlockToWorldPos(new Vector2Int(runStart, by));
+                        _rectBuf[count * 4 + 0] = p0.x - 0.5f;
+                        _rectBuf[count * 4 + 1] = p0.y - 0.5f;
+                        _rectBuf[count * 4 + 2] = bx - runStart;
+                        _rectBuf[count * 4 + 3] = 1f;
+                        count++;
+                        runStart = -1;
+                        if (count >= Proto.MaxRects)
+                        {
+                            break;
+                        }
+                    }
                 }
-                Bounds b = c.bounds;
-                // Inflate so adjacent tiles overlap — a sub-pixel seam must never drop her.
-                const float margin = 0.1f;
-                float x0 = Mathf.Max(b.min.x, minX) - margin;
-                float y0 = Mathf.Max(b.min.y, minY) - margin;
-                float x1 = Mathf.Min(b.max.x, maxX) + margin;
-                float y1 = Mathf.Min(b.max.y, maxY) + margin;
-                if (x1 <= x0 || y1 <= y0)
-                {
-                    continue;
-                }
-                _rectBuf[count * 4 + 0] = x0;
-                _rectBuf[count * 4 + 1] = y0;
-                _rectBuf[count * 4 + 2] = x1 - x0;
-                _rectBuf[count * 4 + 3] = y1 - y0;
-                count++;
             }
 
             _terrainRev++;
-            _link.WriteTerrain(cb.size.y, _rectBuf, count, _terrainRev);
+            _link.WriteTerrain(cb.size.y, anchor.x, anchor.y, _rectBuf, count, _terrainRev);
+
+            if (Mathf.Abs(anchor.y - _lastAnchorY) > 0.25f || count != _lastTerrainCount)
+            {
+                _lastAnchorY = anchor.y;
+                _lastTerrainCount = count;
+                Plugin.Log.LogInfo("terrain: count=" + count + " anchor=(" + anchor.x.ToString("0.0") + "," +
+                                   anchor.y.ToString("0.0") + ") groundHit=" + (ground.collider != null) +
+                                   " body=(" + _body.transform.position.x.ToString("0.0") + "," +
+                                   _body.transform.position.y.ToString("0.0") + ")");
+            }
         }
+
+        private float _lastAnchorY = float.NaN;
+        private int _lastTerrainCount = -1;
 
         /// <summary>Spawn a visible dummy near the player to pogo off (F7 in the sandbox).</summary>
         private void SpawnDummy()

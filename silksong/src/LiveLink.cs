@@ -22,6 +22,7 @@ namespace HornetExporter
         private PassthroughLink _link;
         private tk2dSpriteAnimator _anim;
         private Rigidbody2D _rb;
+        private Collider2D _heroCol;
         private int _lastClipHash;
         private bool _capLogged;
         private int _stateTick;
@@ -73,6 +74,10 @@ namespace HornetExporter
             {
                 _rb = hero.GetComponent<Rigidbody2D>();
             }
+            if (_heroCol == null)
+            {
+                _heroCol = hero.GetComponent<Collider2D>();
+            }
 
             // S2: refresh the terrain proxy from the host window, then publish Hornet's state mapped
             // back into CU coordinates so the host can puppet its body/camera to her.
@@ -84,7 +89,8 @@ namespace HornetExporter
             }
             EntityProxies.Poll(_link);
             float cuX, cuY;
-            bool active = TerrainMirror.TryMapToCu(hero.transform.position, out cuX, out cuY);
+            Vector2 silkCenter = _heroCol != null ? (Vector2)_heroCol.bounds.center : (Vector2)hero.transform.position;
+            bool active = TerrainMirror.TryMapToCu(silkCenter, out cuX, out cuY);
             Vector2 hv = _rb != null ? _rb.linearVelocity : Vector2.zero;
             float k = TerrainMirror.Scale;
             int facing = hero.transform.localScale.x >= 0f ? 1 : -1;
@@ -101,6 +107,7 @@ namespace HornetExporter
                 Vector2 v = _rb != null ? _rb.linearVelocity : Vector2.zero;
                 Plugin.Log.LogInfo("LiveLink state: clip=" + clip + " vel=(" + v.x.ToString("0.0") +
                                    "," + v.y.ToString("0.0") + ") pos=" + hero.transform.position.x.ToString("0.0") +
+                                   "," + hero.transform.position.y.ToString("0.0") +
                                    " in=0x" + InjectedButtons.ToString("X"));
             }
 

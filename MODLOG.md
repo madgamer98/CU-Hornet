@@ -449,3 +449,25 @@ maxHp, flags`), revisioned.
   timed keys was unreliable (jump timing), but manual play proves the path.
 - **Next (phase 2):** `Events` ring (Silk→CU) so Hornet's hits apply CU damage — relay via
   `DamageEnemies.HitResponded` or a proxy hit relay, plus CU damage numbers.
+
+### S4 follow-up — real-run terrain alignment (2026-10-03, FIXED)
+- **Symptom (human):** in a *real run*, activating the mirror made Hornet fall through the floor for a
+  while before settling. The sandbox was fine.
+- **Root cause 1 (collider shape):** real-run ground is `TilemapCollider2D` and `collider.bounds` there is
+  a **64x64 chunk AABB**, not solid tiles. The exporter was shipping giant phantom boxes, so the proxy
+  floor was wrong. (Diagnostic: `col0=TilemapCollider2D 64.0x64.0`.)
+- **Root cause 2 (origin):** terrain rects are absolute and anchored at CU's **ground contact**, but the
+  S2 mapping origin was CU's **body transform** (`CuState`), which sits above the floor → the floor
+  mapped below her feet.
+- **Fix (protocol v7):**
+  - `PublishTerrain` now samples CU's **block grid** (`WorldGeneration.world.GetBlock`/`GetBlockInfo`,
+    1 block = 1 world unit via `BlockToWorldPos`) over ±48 units and emits **row run-length merged**
+    rects. `MaxRects` 256 → 2048. No collider bounds involved.
+  - The terrain header carries the anchor (CU collider-centre x, ground-contact y); Silksong sets
+    `_cuOrigin = anchor`, `_silkOrigin = (Hornet collider-centre x, feet y)`; the player state maps
+    Hornet's collider centre, and CU places its body so its collider centre lands there (`- col.offset`).
+    Apply no longer drops her 3 units.
+- **Verified (lifepod real run):** F4 → `applied 441 boxes k=0.416 cuAnchor=(0.0,483.0)`; the puppet is
+  **stable** (`got=(0.0,485.5)` held, `pos=20.5,5.0 vel=0`), no fall; CU shows her standing in the pod.
+- CU logs the terrain anchor/count on change and the puppet target every 0.5 s; Silksong's state log now
+  includes Y, so any future drift is directly visible.

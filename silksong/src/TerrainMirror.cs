@@ -79,8 +79,9 @@ namespace HornetExporter
 
             int last = -1;
             int count, revision;
-            float playerHeight;
-            if (!l.ReadTerrain(Rects, out count, out revision, out playerHeight, ref last))
+            float playerHeight, anchorX, anchorY;
+            if (!l.ReadTerrain(Rects, out count, out revision, out playerHeight,
+                out anchorX, out anchorY, ref last))
             {
                 Plugin.Log.LogWarning("TerrainMirror: no terrain window from host yet.");
                 return;
@@ -91,15 +92,10 @@ namespace HornetExporter
                 return;
             }
 
-            float cx, cy, cvx, cvy;
-            int cfacing;
-            bool cgrounded;
-            int cflags;
-            l.ReadCuState(out cx, out cy, out cvx, out cvy, out cfacing, out cgrounded, out cflags);
-
             Restore();
-            _cuOrigin = new Vector2(cx, cy);
-            _silkOrigin = new Vector2(hero.transform.position.x, hero.transform.position.y);
+            // Fixed mapping origin: CU ground contact (collider-centre x, floor y) <-> Hornet feet.
+            _cuOrigin = new Vector2(anchorX, anchorY);
+            _silkOrigin = new Vector2(heroCol.bounds.center.x, heroCol.bounds.min.y);
             _k = heroCol.bounds.size.y / playerHeight;
             _lastRev = revision;
             _hash = HashRects(count);
@@ -111,7 +107,8 @@ namespace HornetExporter
             DisableVanillaTerrain();
             BuildBoxes(count);
 
-            Vector3 p = new Vector3(_silkOrigin.x, _silkOrigin.y + 3f, hero.transform.position.z);
+            // The mirrored floor maps to her feet, so just zero velocity (no drop needed).
+            Vector3 p = new Vector3(heroCol.bounds.center.x, heroCol.bounds.min.y + 0.1f, hero.transform.position.z);
             hero.transform.position = p;
             Rigidbody2D rb = hero.GetComponent<Rigidbody2D>();
             if (rb != null)
@@ -122,7 +119,9 @@ namespace HornetExporter
 
             Plugin.Log.LogInfo("TerrainMirror: applied " + count + " boxes k=" + _k.ToString("0.###") +
                                " hornetH=" + heroCol.bounds.size.y.ToString("0.##") +
-                               " cuH=" + playerHeight.ToString("0.##") + " rev=" + revision);
+                               " cuH=" + playerHeight.ToString("0.##") +
+                               " cuAnchor=(" + anchorX.ToString("0.0") + "," + anchorY.ToString("0.0") + ")" +
+                               " rev=" + revision);
         }
 
         /// <summary>Called each frame; rebuilds the proxy when the host's terrain window changes.</summary>
@@ -133,8 +132,9 @@ namespace HornetExporter
                 return;
             }
             int count, revision;
-            float playerHeight;
-            if (!l.ReadTerrain(Rects, out count, out revision, out playerHeight, ref _lastRev))
+            float playerHeight, anchorX, anchorY;
+            if (!l.ReadTerrain(Rects, out count, out revision, out playerHeight,
+                out anchorX, out anchorY, ref _lastRev))
             {
                 return;
             }
