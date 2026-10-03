@@ -31,9 +31,6 @@ namespace HornetExporter
         private bool _capLogged;
         private int _capFail;
         private int _stateTick;
-        private int _hudHash;
-        private int _hudTick;
-        private bool _hudPublished;
         private int _hudFail;
 
         /// <summary>S5 2B: cheap thumbprint of the vitals the HUD reflects; gates HUD publishing.</summary>
@@ -142,35 +139,25 @@ namespace HornetExporter
                 _link.WriteVitals(pdv.health, pdv.maxHealth, pdv.healthBlue, pdv.silk, pdv.silkMax,
                     pdv.geo, dead);
 
-                // S5 2B: publish the HUD at a bounded cadence (every 2nd frame, ~30fps) plus
-                // immediately on any vitals change. Pure on-change publishing froze whatever tween
-                // frame it caught last (e.g. a half-filled silk bar); half-res is the bandwidth guard,
-                // not the cadence.
+                // S5 2B: publish the HUD every frame. 30fps / on-change cadences both looked choppy
+                // in CU (HUD tweens juddered against the host's 60fps), so the human asked for the
+                // full cadence. The half-res RT is the bandwidth guard. The vitals hash is still
+                // published so the host can see what changed.
                 int hudHash = HashVitals(pdv.health, pdv.maxHealth, pdv.healthBlue, pdv.silk,
                     pdv.silkMax, pdv.geo, dead);
-                _hudTick++;
-                bool dirty = hudHash != _hudHash;
-                if (dirty)
+                byte[] hud;
+                int hw, hh;
+                if (HudCapture.Capture(out hud, out hw, out hh))
                 {
-                    _hudHash = hudHash;
+                    _link.WriteHud(hud, hw, hh, hudHash);
+                    _hudFail = 0;
                 }
-                if (dirty || !_hudPublished || (_hudTick % 2 == 0))
+                else
                 {
-                    byte[] hud;
-                    int hw, hh;
-                    if (HudCapture.Capture(out hud, out hw, out hh))
+                    _hudFail++;
+                    if (_hudFail % 120 == 1)
                     {
-                        _link.WriteHud(hud, hw, hh, hudHash);
-                        _hudPublished = true;
-                        _hudFail = 0;
-                    }
-                    else
-                    {
-                        _hudFail++;
-                        if (_hudFail % 120 == 1)
-                        {
-                            Plugin.Log.LogWarning("LiveLink: HUD capture returned no frame (" + _hudFail + "x)");
-                        }
+                        Plugin.Log.LogWarning("LiveLink: HUD capture returned no frame (" + _hudFail + "x)");
                     }
                 }
             }
