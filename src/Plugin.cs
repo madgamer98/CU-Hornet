@@ -24,6 +24,7 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> AvatarScale;
         internal static ConfigEntry<float> AvatarOffsetX;
         internal static ConfigEntry<float> AvatarOffsetY;
+        internal static ConfigEntry<float> AvatarPpu;
 
         private Harmony _harmony;
 
@@ -39,6 +40,7 @@ namespace HornetInCasualties
             AvatarScale = Config.Bind("Avatar", "Scale", 1.0f, "Hornet sprite scale.");
             AvatarOffsetX = Config.Bind("Avatar", "OffsetX", 0f, "Hornet horizontal offset (in sprite units).");
             AvatarOffsetY = Config.Bind("Avatar", "OffsetY", 0f, "Hornet vertical offset (in sprite units).");
+            AvatarPpu = Config.Bind("Avatar", "Ppu", 64f, "Pixels per unit for the baked Hornet frames.");
 
             _harmony = new Harmony(Guid);
             _harmony.PatchAll();

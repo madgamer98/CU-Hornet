@@ -168,6 +168,25 @@ CU's player controller.
   F8 renders Hornet to `hornet_capture.png`. Camera isolates a `HornetCapture` layer (falls back to the
   whole scene if the layer doesn't exist — may need creating).
 
+## PASSTHROUGH MILESTONE (2026-10-02)
+- Silksong-side plugin works: F7 inspects (live hero = `Hero_Hornet(Clone)`, `tk2dSpriteAnimator`,
+  current clip `Idle`), F8 captures Hornet isolated, **F6 dumps the live 535-clip table**, **F5 bakes frames**.
+- **Live Hornet clips** include the full cloaked moveset: Idle, Run, Airborne, Fall, Land, HardLand, Turn,
+  Dash, Slash, SlashAlt, SlashEffect, UpSlash, DownSpike, Wall Scramble, BindCharge Ground, ... The live
+  sprite names are `Hornet_*` (e.g. `Hornet_run_new0000`, `Hornet_slashes0009`).
+- **Isolation method:** render the game's own main camera twice (Hornet's root `tk2dSprite` enabled vs
+  disabled) and use the difference as alpha. No URP/custom-camera issues (Silksong is built-in pipeline;
+  a manual camera rendered blank).
+- **Bake:** `silksong/` F5 walks 14 clips → **115 PNGs + pivots** in
+  `HornetExporter\baked\` (`bake.json`). Copied into CU's `plugins\HornetInCasualties\hornet\`.
+- **CU side:** `HornetInCasualties` loads `bake.json` and draws Hornet on a `SpriteRenderer`
+  (mesh route abandoned: `MeshRenderer` is stripped). Config `Scale`/`Ppu`/`OffsetX`/`OffsetY`,
+  `HideVanillaBody` (now hides all body sprites). Clip chosen from `Body` state (Idle/Run/Airborne) and
+  logged on change. **Verified in the CU sandbox** (screenshots `shots/hornet9*.png`).
+- **Known issues:** the sandbox ragdoll oscillates so Hornet flips Idle↔Airborne; placement/scale need
+  tuning (current Scale 0.8, Ppu 64); Fall/Turn not in the bake; live state link not yet wired.
+
 ## Next
-- Run Silksong, reach gameplay, F7 to inspect and F8 to capture. Then wire the live link into CU.
+- Tune placement/scale; bake Fall/Turn/Sprint; pick the clip from a stabler signal.
+- Wire the live link (Silksong streams current clip+frame or CU drives Silksong), or keep offline playback.
 - Then Hornet's moveset (Stage 2).

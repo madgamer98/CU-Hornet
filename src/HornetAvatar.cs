@@ -5,16 +5,15 @@ namespace HornetInCasualties
 {
     /// <summary>
     /// The visible Hornet that rides the vanilla player's physics body.
-    /// Frames come from the user's own Silksong install and are drawn as quads
-    /// (see HornetSprites); the clip is chosen from the vanilla Body's state.
+    /// Frames are baked from the user's own Silksong install (Silksong HornetExporter plugin)
+    /// and drawn on a SpriteRenderer; the clip is chosen from the vanilla Body's state.
     /// </summary>
     public class HornetAvatar : MonoBehaviour
     {
         private Body _body;
         private Transform _sprite;
-        private SpriteRenderer _placeholder;
-        private MeshRenderer _meshRenderer;
-        private HornetMeshAnimator _animator;
+        private SpriteRenderer _renderer;
+        private HornetAnimator _animator;
 
         public static HornetAvatar Ensure(Body body)
         {
@@ -22,13 +21,11 @@ namespace HornetInCasualties
             {
                 return null;
             }
-
             HornetAvatar existing = body.GetComponent<HornetAvatar>();
             if (existing != null)
             {
                 return existing;
             }
-
             HornetAvatar avatar = body.gameObject.AddComponent<HornetAvatar>();
             try
             {
@@ -50,42 +47,22 @@ namespace HornetInCasualties
             go.transform.SetParent(body.transform, false);
             _sprite = go.transform;
 
-            _placeholder = go.AddComponent<SpriteRenderer>();
-            _placeholder.sprite = PlaceholderSprite.Create();
-            _placeholder.sortingOrder = 5000;
-
-            Plugin.Log.LogInfo("init step 1 (placeholder ok)");
-            var filter = go.AddComponent<MeshFilter>();
-            Plugin.Log.LogInfo("init step 1a (filter)");
-            _meshRenderer = go.AddComponent<MeshRenderer>();
-            Plugin.Log.LogInfo("init step 1b (renderer null=" + (_meshRenderer == null) + ")");
-            if (_meshRenderer != null)
-            {
-                _meshRenderer.sortingOrder = 5001;
-            }
-            Plugin.Log.LogInfo("init step 1b2 (sorting ok)");
-            _animator = go.AddComponent<HornetMeshAnimator>();
-            Plugin.Log.LogInfo("init step 1c (animator null=" + (_animator == null) + ")");
-            if (_animator != null)
-            {
-                _animator.Init(filter, _meshRenderer);
-            }
-            Plugin.Log.LogInfo("init step 2 (mesh components ok)");
+            _renderer = go.AddComponent<SpriteRenderer>();
+            _renderer.sortingOrder = 5000;
+            _animator = go.AddComponent<HornetAnimator>();
+            _animator.Init(_renderer);
 
             if (!HornetSprites.Ready)
             {
-                string dir = Plugin.Instance != null && Plugin.Instance.Info != null
-                    ? Path.GetDirectoryName(Plugin.Instance.Info.Location)
-                    : null;
-                Plugin.Log.LogInfo("init step 3 (dir=" + (dir ?? "<null>") + ")");
-                HornetSprites.Load(dir);
+                HornetSprites.Load(Path.GetDirectoryName(Plugin.Instance.Info.Location));
             }
-
             if (HornetSprites.Ready)
             {
-                _placeholder.enabled = false;
                 _animator.Play("Idle");
-                Plugin.Log.LogInfo("Hornet avatar using extracted frames.");
+            }
+            else
+            {
+                _renderer.sprite = PlaceholderSprite.Create();
             }
         }
 
@@ -96,9 +73,7 @@ namespace HornetInCasualties
                 return;
             }
 
-            bool ready = HornetSprites.Ready;
-            _placeholder.enabled = !ready && Plugin.Enable.Value;
-            _meshRenderer.enabled = ready && Plugin.Enable.Value;
+            _renderer.enabled = Plugin.Enable.Value;
             if (!Plugin.Enable.Value)
             {
                 return;
@@ -114,39 +89,52 @@ namespace HornetInCasualties
             float sx = _body.isRight ? scale : -scale;
             _sprite.localScale = new Vector3(sx, scale, 1f);
 
-            if (ready)
+            if (HornetSprites.Ready)
             {
                 _animator.Play(ChooseClip());
             }
 
-            if (Plugin.HideVanillaBody.Value && _body.limbs != null)
+            if (Plugin.HideVanillaBody.Value)
             {
-                foreach (Limb limb in _body.limbs)
+                foreach (SpriteRenderer sr in _body.GetComponentsInChildren<SpriteRenderer>(true))
                 {
-                    if (limb == null)
+                    if (sr == _renderer || sr.transform.IsChildOf(_sprite))
                     {
                         continue;
                     }
-                    SpriteRenderer sr = limb.GetComponent<SpriteRenderer>();
-                    if (sr != null)
-                    {
-                        sr.enabled = false;
-                    }
+                    sr.enabled = false;
                 }
             }
         }
+
+        private string _lastClip;
 
         private string ChooseClip()
         {
             float vy = _body.rb != null ? _body.rb.velocity.y : 0f;
             float vx = _body.rb != null ? _body.rb.velocity.x : 0f;
 
-            if (!_body.grounded)
+            string clip;
+            if (!_body.grounded && Mathf.Abs(vy) > 2f)
             {
-                return vy > 1.5f ? "Jump" : "Fall";
+                clip = "Airborne";
+            }
+            else if (Mathf.Abs(vx) > 0.4f)
+            {
+                clip = "Run";
+            }
+            else
+            {
+                clip = "Idle";
             }
 
-            return Mathf.Abs(vx) > 0.4f ? "Run" : "Idle";
+            if (clip != _lastClip)
+            {
+                _lastClip = clip;
+                Plugin.Log.LogInfo("Hornet clip -> " + clip + " (grounded=" + _body.grounded +
+                                   " vx=" + vx.ToString("0.00") + " vy=" + vy.ToString("0.00") + ")");
+            }
+            return clip;
         }
     }
 
@@ -163,7 +151,6 @@ namespace HornetInCasualties
             {
                 return _cached;
             }
-
             var tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
             var px = new Color32[W * H];
             for (int y = 0; y < H; y++)
@@ -173,23 +160,12 @@ namespace HornetInCasualties
                     bool head = y >= 30;
                     bool torso = y >= 8 && y < 32 && x >= 8 && x < 16;
                     bool legs = y < 8 && x >= 9 && x < 15;
-                    Color32 c;
-                    if (head)
-                    {
-                        c = new Color32(220, 60, 60, 255);
-                    }
-                    else if (torso || legs)
-                    {
-                        c = new Color32(240, 235, 230, 255);
-                    }
-                    else
-                    {
-                        c = new Color32(0, 0, 0, 0);
-                    }
+                    Color32 c = head ? new Color32(220, 60, 60, 255)
+                        : (torso || legs) ? new Color32(240, 235, 230, 255)
+                        : new Color32(0, 0, 0, 0);
                     px[y * W + x] = c;
                 }
             }
-
             tex.SetPixels32(px);
             tex.Apply();
             _cached = Sprite.Create(tex, new Rect(0, 0, W, H), new Vector2(0.5f, 0.5f), 16f);

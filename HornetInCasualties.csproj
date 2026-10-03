@@ -16,6 +16,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The Silksong-side plugin has its own project; don't compile it here. -->
+    <Compile Remove="silksong/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- BepInEx 5 core (from the game's own install; never copied). -->
     <Reference Include="BepInEx">
       <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
