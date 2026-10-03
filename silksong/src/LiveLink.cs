@@ -31,6 +31,28 @@ namespace HornetExporter
         private bool _capLogged;
         private int _capFail;
         private int _stateTick;
+        private int _hudHash;
+        private int _hudSettle;
+        private bool _hudPublished;
+        private int _hudFail;
+
+        /// <summary>S5 2B: cheap thumbprint of the vitals the HUD reflects; gates HUD publishing.</summary>
+        private static int HashVitals(int health, int maxHealth, int healthBlue, int silk, int silkMax,
+            int geo, bool dead)
+        {
+            unchecked
+            {
+                int h = 17;
+                h = h * 31 + health;
+                h = h * 31 + maxHealth;
+                h = h * 31 + healthBlue;
+                h = h * 31 + silk;
+                h = h * 31 + silkMax;
+                h = h * 31 + geo;
+                h = h * 31 + (dead ? 1 : 0);
+                return h;
+            }
+        }
 
         private void Awake()
         {
@@ -119,6 +141,39 @@ namespace HornetExporter
                 bool dead = (hero.cState != null && hero.cState.dead) || pdv.health <= 0;
                 _link.WriteVitals(pdv.health, pdv.maxHealth, pdv.healthBlue, pdv.silk, pdv.silkMax,
                     pdv.geo, dead);
+
+                // S5 2B: publish the HUD only when its vitals thumbprint changes (plus a couple of
+                // settle frames for HUD animations). Half-res, double-buffered - not every frame.
+                int hudHash = HashVitals(pdv.health, pdv.maxHealth, pdv.healthBlue, pdv.silk,
+                    pdv.silkMax, pdv.geo, dead);
+                if (hudHash != _hudHash)
+                {
+                    _hudHash = hudHash;
+                    _hudSettle = 2;
+                }
+                if (_hudSettle > 0 || !_hudPublished)
+                {
+                    byte[] hud;
+                    int hw, hh;
+                    if (HudCapture.Capture(out hud, out hw, out hh))
+                    {
+                        _link.WriteHud(hud, hw, hh, hudHash);
+                        _hudPublished = true;
+                        _hudFail = 0;
+                        if (_hudSettle > 0)
+                        {
+                            _hudSettle--;
+                        }
+                    }
+                    else
+                    {
+                        _hudFail++;
+                        if (_hudFail % 120 == 1)
+                        {
+                            Plugin.Log.LogWarning("LiveLink: HUD capture returned no frame (" + _hudFail + "x)");
+                        }
+                    }
+                }
             }
 
             // Diagnostics: log Hornet's own clip + velocity so we can prove input reached her.

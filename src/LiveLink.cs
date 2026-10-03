@@ -59,6 +59,8 @@ namespace HornetInCasualties
         private bool _vtValid;
         private int _vtHealth, _vtMax, _vtBlue, _vtSilk, _vtSilkMax, _vtGeo;
         private bool _vtDead;
+        private byte[] _hudBuf;
+        private int _lastHudFrameId;
 
         public void Init(Body body)
         {
@@ -68,6 +70,7 @@ namespace HornetInCasualties
             }
             _body = body;
             _buf = new byte[Proto.PixelsSize];
+            _hudBuf = new byte[Proto.HudPixelsSize];
 
             var go = new GameObject("HornetLive");
             go.transform.SetParent(body.transform, false);
@@ -165,6 +168,21 @@ namespace HornetInCasualties
                                        " silk=" + vsilk + "/" + vsmax + " geo=" + vgeo +
                                        " dead=" + vdead);
                 }
+            }
+
+            // S5 2B: draw Silksong's HUD over CU's world (published on change, half-res). Hide it when
+            // the guest is gone so a stale HUD does not linger.
+            int hudW, hudH, hudFid;
+            if (_link.ReadHud(_hudBuf, out hudW, out hudH, out hudFid, ref _lastHudFrameId))
+            {
+                if (hudW > 1 && hudH > 1)
+                {
+                    HudOverlay.Ensure().SetFrame(_hudBuf, hudW, hudH);
+                }
+            }
+            if (!_link.SilkAlive(1000))
+            {
+                HudOverlay.Hide();
             }
 
             // S1: publish a local window of ground AABBs so Silksong can collide against CU's world.

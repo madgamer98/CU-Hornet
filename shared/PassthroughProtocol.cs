@@ -15,7 +15,7 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 10;
+        public const int Version = 11;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -59,7 +59,16 @@ namespace HornetPassthrough
         // disturb any existing offset.
         public const int VitalsOffset = EventsOffset + EventsSize;
         public const int VitalsSize = 32;
-        public const long MappingSize = VitalsOffset + VitalsSize;
+        // v11 Hud (Silksong -> CU): the game's HUD camera rendered to a half-res RT, published only
+        // when the vitals thumbprint changes (see WriteHud). Double-buffered like the Hornet frame.
+        public const int HudOffset = VitalsOffset + VitalsSize;
+        public const int HudHeaderSize = 32;
+        public const int MaxHudWidth = 1280;
+        public const int MaxHudHeight = 720;
+        public const int HudBuffers = 2;
+        public const int HudPixelsSize = MaxHudWidth * MaxHudHeight * 4;
+        public const int HudPixelsOffset = HudOffset + HudHeaderSize;
+        public const long MappingSize = HudPixelsOffset + HudPixelsSize * HudBuffers;
 
         // Raw button bits (Input region, CU -> Silksong). Mirrors the host's real binds.
         public const int BtnLeft = 1 << 0;
@@ -170,6 +179,15 @@ namespace HornetPassthrough
         public const int VI_Geo = 20;
         public const int VI_Dead = 24;     // 0/1
         public const int VI_Seq = 28;      // int seqlock
+
+        // Hud header fields (offsets within the Hud region)
+        public const int HH_Seq = 0;       // int seqlock (commit)
+        public const int HH_Width = 4;
+        public const int HH_Height = 8;
+        public const int HH_Hash = 12;     // int, vitals thumbprint that produced this frame
+        public const int HH_BufIndex = 16;
+        public const int HH_FrameId = 20;
+        public const int HH_Valid = 24;    // 1 when a frame has been published
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -477,6 +495,72 @@ namespace HornetPassthrough
             dead = ReadInt(Proto.VitalsOffset + Proto.VI_Dead) != 0;
             int seq2 = ReadInt(Proto.VitalsOffset + Proto.VI_Seq);
             return seq1 == seq2;
+        }
+
+        // ---- Hud (Silksong -> CU) ----
+        /// <summary>Publish a HUD frame. pixels is RGBA32, bottom-up. Double-buffered like WriteFrame.</summary>
+        public void WriteHud(byte[] pixels, int width, int height, int hash)
+        {
+            int current = ReadInt(Proto.HudOffset + Proto.HH_BufIndex);
+            if (current < 0 || current >= Proto.HudBuffers)
+            {
+                current = 0;
+            }
+            int next = (current + 1) % Proto.HudBuffers;
+            if (pixels != null)
+            {
+                int n = System.Math.Min(pixels.Length, Proto.HudPixelsSize);
+                _view.WriteArray(Proto.HudPixelsOffset + next * Proto.HudPixelsSize, pixels, 0, n);
+            }
+            int seq = ReadInt(Proto.HudOffset + Proto.HH_Seq);
+            WriteInt(Proto.HudOffset + Proto.HH_Seq, seq + 1); // odd = writing
+            WriteInt(Proto.HudOffset + Proto.HH_Valid, pixels != null ? 1 : 0);
+            WriteInt(Proto.HudOffset + Proto.HH_Width, width);
+            WriteInt(Proto.HudOffset + Proto.HH_Height, height);
+            WriteInt(Proto.HudOffset + Proto.HH_Hash, hash);
+            WriteInt(Proto.HudOffset + Proto.HH_FrameId,
+                ReadInt(Proto.HudOffset + Proto.HH_FrameId) + 1);
+            WriteInt(Proto.HudOffset + Proto.HH_BufIndex, next);
+            WriteInt(Proto.HudOffset + Proto.HH_Seq, seq + 2); // even = stable
+        }
+
+        /// <summary>Read the latest HUD frame if it changed. Returns true when updated.</summary>
+        public bool ReadHud(byte[] pixels, out int width, out int height, out int frameId, ref int lastFrameId)
+        {
+            width = height = 0;
+            frameId = ReadInt(Proto.HudOffset + Proto.HH_FrameId);
+            if (frameId == lastFrameId)
+            {
+                return false;
+            }
+            if (ReadInt(Proto.HudOffset + Proto.HH_Valid) == 0)
+            {
+                return false;
+            }
+            int seq1 = ReadInt(Proto.HudOffset + Proto.HH_Seq);
+            if ((seq1 & 1) != 0)
+            {
+                return false;
+            }
+            width = ReadInt(Proto.HudOffset + Proto.HH_Width);
+            height = ReadInt(Proto.HudOffset + Proto.HH_Height);
+            int bufIndex = ReadInt(Proto.HudOffset + Proto.HH_BufIndex);
+            if (bufIndex < 0 || bufIndex >= Proto.HudBuffers)
+            {
+                bufIndex = 0;
+            }
+            int n = System.Math.Min(width * height * 4, Proto.HudPixelsSize);
+            if (n > 0 && pixels != null && pixels.Length >= n)
+            {
+                _view.ReadArray(Proto.HudPixelsOffset + bufIndex * Proto.HudPixelsSize, pixels, 0, n);
+            }
+            int seq2 = ReadInt(Proto.HudOffset + Proto.HH_Seq);
+            if (seq1 != seq2)
+            {
+                return false;
+            }
+            lastFrameId = frameId;
+            return true;
         }
 
         /// <summary>Read one event by absolute index. False if it was overwritten by the ring.</summary>

@@ -701,3 +701,31 @@ dead` (ints + a 0/1 dead flag; `VitalsSize = 32`, seq last).
 `LiveLink vitals: hp=9/9 blue=0 silk=4/17 geo=0 dead=False` with silk ticking up (4->9) as Hornet
 recovers at the bench; `hp` matches Silksong's 9 mask icons. `dead` false. Frames still 640x640 and
 healthy. Health as source of truth is in place; wiring damage-pinning/death is 2C/2D.
+
+## S5 milestone 2B - Silksong HUD overlay (2026-10-03, VERIFIED rendering)
+
+Protocol **v11** adds a `Hud` region (Silksong -> CU), appended after `Vitals`, double-buffered:
+header (`seq, width, height, hash, bufIndex, frameId, valid`) + `HudBuffers = 2` pixel buffers at
+`MaxHudWidth/Height = 1280x720` (half of up to 2560x1440).
+
+- `silksong/src/HudCapture.cs` (new): renders `GameCameras.instance.hudCamera` to a **half-res**
+  `RenderTexture` (`Screen/2`) with a transparent SolidColor clear, `ReadPixels`, same save/restore
+  pattern as the blank Hornet capture. Skips when the HUD camera is inactive/off-screen or the frame
+  has no alpha. The HUD canvas is `RenderMode.ScreenSpaceCamera` on `hudCamera`, so it renders into the
+  RT correctly.
+- `silksong/src/LiveLink.cs`: computes a `HashVitals` thumbprint (health/max/blue/silk/silkMax/geo/
+  dead); when it changes (plus 2 settle frames) it captures and `WriteHud`s. **Not** every frame - this
+  is the bandwidth guardrail from the scope.
+- `shared/PassthroughProtocol.cs`: `Version 11`; `HudOffset = VitalsOffset + VitalsSize`;
+  `WriteHud`/`ReadHud` (off-buffer write then a short seqlock flip, like `WriteFrame`).
+- `src/HudOverlay.cs` (CU, new): a `DontDestroyOnLoad` screen-space `Canvas` + full-screen `RawImage`
+  (`raycastTarget = false`, so it cannot eat CU's mouse attack), `FilterMode.Bilinear`. Created lazily
+  on the first HUD frame; `Hide()` when the Silksong heartbeat is lost.
+- `src/LiveLink.cs` (CU): reads HUD frames into `_hudBuf` and feeds `HudOverlay`. Added the
+  `UnityEngine.UIModule` reference to the CU csproj for `Canvas`/`RenderMode`.
+
+**Verified:** both games restarted, mirror applied. CU shows Silksong's 9 mask icons and the silk
+spool/bar overlaid on the sandbox world, aligned with Silksong's own HUD when compared 1:1. The overlay
+transparently lets the CU world show through. One benign `HUD capture returned no frame (1x)` at
+startup (menu/transition, HUD camera inactive), then it published. A damage-driven mask-loss update is
+still worth an eyeball; publishing is gated on the vitals hash so any health/silk/geo change republishes.
