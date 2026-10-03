@@ -3,9 +3,9 @@ using UnityEngine;
 namespace HornetInCasualties
 {
     /// <summary>
-    /// Adds Hornet's moves to the vanilla player body: dash, slash (forward/up/down) and pogo.
-    /// It reads input, plays the matching baked clip via <see cref="HornetAvatar"/>, and applies
-    /// velocity/impulses to the vanilla ragdoll. More moves (needle throw, bind, wall cling) follow.
+    /// Adds Hornet's moves to the vanilla player body. Movement physics (walk, jump, wall
+    /// slide/jump) stay CU's; this adds dash, slash (fwd/up/down), pogo, double jump and the
+    /// needle throw, and drives the matching baked clips.
     /// </summary>
     public class HornetController : MonoBehaviour
     {
@@ -16,7 +16,6 @@ namespace HornetInCasualties
         private float _dashTime;
         private float _dashDir;
         private float _dashReady;
-        private bool _wasDashing;
 
         private float _slashUntil;
         private float _slashReady;
@@ -26,11 +25,34 @@ namespace HornetInCasualties
         private HornetNeedle _needle;
         private float _needleReady;
 
+        private int _airJumps;
+        private float _wallActionUntil;
+        private float _wallJumpUntil;
+        private bool _wasSliding;
+        private bool _lastFacingRight = true;
+        private float _lastGroundedTime;
+
         public void Init(HornetAvatar avatar, Body body)
         {
             _avatar = avatar;
             _body = body;
             _rb = body.rb;
+        }
+
+        // Dash is positional so the vanilla controller can't damp it away.
+        private void FixedUpdate()
+        {
+            if (_dashTime <= 0f || _rb == null)
+            {
+                return;
+            }
+            _dashTime -= Time.fixedDeltaTime;
+            _rb.gravityScale = 0f;
+            _rb.MovePosition(_rb.position + new Vector2(_dashDir * Plugin.DashSpeed.Value * Time.fixedDeltaTime, 0f));
+            if (_dashTime <= 0f)
+            {
+                _rb.gravityScale = 1f;
+            }
         }
 
         private void LateUpdate()
@@ -41,34 +63,56 @@ namespace HornetInCasualties
             }
 
             float now = Time.time;
+            if (_body.grounded)
+            {
+                _lastGroundedTime = now;
+            }
+            HandleTurn();
             HandleJump();
-            HandleWall();
+            HandleWallAnim();
             HandleDash(now);
             HandleSlash(now);
             HandleNeedle(now);
         }
 
-        private bool _usedDoubleJump;
-        private int _wallSide;
-        private float _wallActionUntil;
+        private void HandleTurn()
+        {
+            bool facing = _avatar.FacingRight;
+            if (facing != _lastFacingRight)
+            {
+                _lastFacingRight = facing;
+                if (_body.grounded && Mathf.Abs(_body.moveDir.x) > 0.1f)
+                {
+                    _avatar.PlayAction("Turn", 0.22f);
+                }
+            }
+        }
 
         private void HandleJump()
         {
-            if (_body.grounded)
-            {
-                _usedDoubleJump = false;
-            }
-            if (!Input.GetKeyDown(KeyBinds.GetBind("jump")))
+            KeyCode jump = KeyBinds.GetBind("jump");
+            if (jump == KeyCode.None || !Input.GetKeyDown(jump))
             {
                 return;
             }
-            if (_wallSide != 0)
+
+            if (_body.grounded)
             {
-                return; // handled by HandleWall
+                _airJumps = 0;
+                return; // CU does the ground jump.
             }
-            if (!_body.grounded && !_usedDoubleJump)
+
+            if (_wallJumpUntil > Time.time)
             {
-                _usedDoubleJump = true;
+                return; // a wall jump just happened
+            }
+            if (Time.time - _lastGroundedTime < 0.15f)
+            {
+                return; // ignore the press that left the ground
+            }
+            if (_airJumps < 1)
+            {
+                _airJumps++;
                 if (_rb != null)
                 {
                     _rb.velocity = new Vector2(_rb.velocity.x, Plugin.DoubleJumpSpeed.Value);
@@ -78,113 +122,56 @@ namespace HornetInCasualties
             }
         }
 
-        private void HandleWall()
+        // CU owns wall slide/jump physics; we only play Hornet's animations for them.
+        private void HandleWallAnim()
         {
-            _wallSide = 0;
-            if (_body.grounded || _rb == null)
+            if (_body.grounded)
             {
-                return;
-            }
-            float reach = 0.9f;
-            if (Physics2D.Raycast(_body.transform.position, Vector2.right, reach, LayerMask.GetMask("Ground")))
-            {
-                _wallSide = 1;
-            }
-            else if (Physics2D.Raycast(_body.transform.position, Vector2.left, reach, LayerMask.GetMask("Ground")))
-            {
-                _wallSide = -1;
-            }
-            if (_wallSide == 0)
-            {
+                _wasSliding = false;
+                _airJumps = 0;
                 return;
             }
 
-            // Slide down the wall.
-            if (_rb.velocity.y < 0f)
+            bool sliding = _body.timeSlidfor > 0.05f;
+            if (sliding && _rb != null && _rb.velocity.y < 0f)
             {
-                _rb.velocity = new Vector2(_rb.velocity.x, -Plugin.WallSlideSpeed.Value);
+                if (Time.time >= _wallActionUntil)
+                {
+                    _avatar.PlayAction("Wall Slide", 0.2f);
+                    _wallActionUntil = Time.time + 0.15f;
+                }
+                _airJumps = 0; // touching a wall refreshes the double jump
             }
-            _usedDoubleJump = false;
-
-            if (Input.GetKeyDown(KeyBinds.GetBind("jump")))
+            else if (_wasSliding && _rb != null && _rb.velocity.y > 1f)
             {
-                _rb.velocity = new Vector2(-_wallSide * Plugin.WallJumpX.Value, Plugin.WallJumpY.Value);
-                _avatar.PlayAction("Walljump", 0.35f);
-                Plugin.Log.LogInfo("move: wall jump side=" + _wallSide);
+                _avatar.PlayAction("Walljump", 0.3f);
+                _wallJumpUntil = Time.time + 0.25f;
+                Plugin.Log.LogInfo("move: wall jump (vanilla)");
             }
-            else if (Time.time >= _wallActionUntil)
-            {
-                _avatar.PlayAction("Wall Slide", 0.2f);
-                _wallActionUntil = Time.time + 0.15f;
-            }
-        }
-
-        private void HandleNeedle(float now)
-        {
-            if (_needle != null)
-            {
-                return;
-            }
-            if (!Input.GetKeyDown(Plugin.KeyNeedle.Value.MainKey) || now < _needleReady)
-            {
-                return;
-            }
-            _avatar.PlayAction("NeedleThrow Throwing", 0.4f);
-            _needle = HornetNeedle.Spawn(_body, _avatar.FacingRight, this);
-            _needleReady = now + Plugin.NeedleCooldown.Value;
-            Plugin.Log.LogInfo("move: needle throw");
-        }
-
-        public void OnNeedleCaught()
-        {
-            _needle = null;
-            _avatar.PlayAction("NeedleThrow Catch", 0.3f);
-            Plugin.Log.LogInfo("move: needle caught");
+            _wasSliding = sliding;
         }
 
         private void HandleDash(float now)
         {
-            // End an in-progress dash.
-            if (_dashTime > 0f)
+            if (_dashTime > 0f || now < _dashReady)
             {
-                _dashTime -= Time.deltaTime;
-                if (_rb != null)
-                {
-                    _rb.velocity = new Vector2(_dashDir * Plugin.DashSpeed.Value, 0f);
-                    _rb.gravityScale = 0f;
-                }
-                _wasDashing = true;
-                if (_dashTime <= 0f && _rb != null)
-                {
-                    _rb.gravityScale = 1f;
-                }
                 return;
             }
-
-            if (_wasDashing)
+            if (!Input.GetKeyDown(Plugin.KeyDash.Value.MainKey))
             {
-                _wasDashing = false;
-                if (_rb != null)
-                {
-                    _rb.gravityScale = 1f;
-                }
+                return;
             }
-
-            if (Input.GetKeyDown(Plugin.KeyDash.Value.MainKey) && now >= _dashReady)
-            {
-                _dashDir = _body.isRight ? 1f : -1f;
-                _dashTime = Plugin.DashDuration.Value;
-                _dashReady = now + Plugin.DashCooldown.Value;
-                _avatar.PlayAction("Dash", Plugin.DashDuration.Value + 0.1f);
-                Plugin.Log.LogInfo("move: dash dir=" + _dashDir);
-            }
+            _dashDir = _avatar.FacingRight ? 1f : -1f;
+            _dashTime = Plugin.DashDuration.Value;
+            _dashReady = now + Plugin.DashDuration.Value + Plugin.DashCooldown.Value;
+            _avatar.PlayAction("Dash", Plugin.DashDuration.Value + 0.1f);
+            Plugin.Log.LogInfo("move: dash dir=" + _dashDir);
         }
 
         private void HandleSlash(float now)
         {
             if (now < _slashUntil)
             {
-                // The active frames of the slash: check for a hit once.
                 if (!_slashHit && now >= _slashUntil - Plugin.SlashActive.Value)
                 {
                     _slashHit = true;
@@ -212,8 +199,8 @@ namespace HornetInCasualties
                 clip = "Slash";
             }
 
-            HornetClip c;
             float dur = 0.25f;
+            HornetClip c;
             if (HornetSprites.Clips != null && HornetSprites.Clips.TryGetValue(clip, out c) && c.Frames.Length > 0)
             {
                 dur = c.Frames.Length / c.Fps;
@@ -231,7 +218,7 @@ namespace HornetInCasualties
             Vector2 origin = _body.transform.position;
             Vector2 dir = _slashClip == "UpSlash" ? Vector2.up
                 : _slashClip == "DownSpike" ? Vector2.down
-                : (_body.isRight ? Vector2.right : Vector2.left);
+                : (_avatar.FacingRight ? Vector2.right : Vector2.left);
             Vector2 center = origin + dir * Plugin.SlashReach.Value;
             Vector2 size = new Vector2(Plugin.SlashRange.Value, Plugin.SlashRange.Value);
 
@@ -243,7 +230,6 @@ namespace HornetInCasualties
                 {
                     continue;
                 }
-
                 var be = col.GetComponent<BuildingEntity>();
                 if (be != null && !be.cantHit)
                 {
@@ -261,20 +247,55 @@ namespace HornetInCasualties
                     hit = true;
                     continue;
                 }
-
-                // Terrain / hazards count as pogo surfaces.
                 if (col.CompareTag("BlockGround") || col.GetComponent<Damageable>() != null)
                 {
                     hit = true;
                 }
             }
 
-            // Pogo: a down-slash on an enemy/terrain while airborne bounces you up.
-            if (hit && _slashClip == "DownSpike" && !_body.grounded && _rb != null)
+            if (hit && _slashClip == "DownSpike" && !_body.grounded)
             {
-                _rb.velocity = new Vector2(_rb.velocity.x, Plugin.PogoSpeed.Value);
-                Plugin.Log.LogInfo("move: pogo bounce");
+                Pogo();
             }
+        }
+
+        private void Pogo()
+        {
+            if (_rb == null)
+            {
+                return;
+            }
+            _rb.velocity = new Vector2(_rb.velocity.x, Plugin.PogoSpeed.Value);
+            if (_body.baseLimb != null && _body.baseLimb.rb != null)
+            {
+                _body.baseLimb.rb.velocity = new Vector2(_body.baseLimb.rb.velocity.x, Plugin.PogoSpeed.Value);
+            }
+            _body.grounded = false;
+            _airJumps = 0;
+            Plugin.Log.LogInfo("move: pogo bounce");
+        }
+
+        private void HandleNeedle(float now)
+        {
+            if (_needle != null)
+            {
+                return;
+            }
+            if (!Input.GetKeyDown(Plugin.KeyNeedle.Value.MainKey) || now < _needleReady)
+            {
+                return;
+            }
+            _avatar.PlayAction("NeedleThrow Throwing", 0.4f);
+            _needle = HornetNeedle.Spawn(_body, _avatar.FacingRight, this);
+            _needleReady = now + Plugin.NeedleCooldown.Value;
+            Plugin.Log.LogInfo("move: needle throw");
+        }
+
+        public void OnNeedleCaught()
+        {
+            _needle = null;
+            _avatar.PlayAction("NeedleThrow Catch", 0.3f);
+            Plugin.Log.LogInfo("move: needle caught");
         }
     }
 }

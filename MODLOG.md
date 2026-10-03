@@ -227,8 +227,20 @@ driving it headless is the full SkyCraft build.
 - Keys kept J (slash) / K (dash) / L (needle) / H (bind, not implemented yet).
 - Added NeedleThrow/Harpoon clips to the baker's list (need a re-bake to have their animations).
 
+## Moveset fixes (2026-10-02)
+- **Dash didn't cross distance:** CU damps horizontal motion, so setting `rb.velocity` was lost. Dash is
+  now **positional** (`rb.MovePosition` in FixedUpdate) → real distance = DashSpeed × DashDuration.
+- **Pogo too weak:** PogoSpeed 13 → 19, applied to both the root `rb` and `baseLimb.rb`, `grounded=false`.
+- **Turn animation:** play "Turn" on facing change while grounded and moving.
+- **Double jump:** gated on a tracked time-since-grounded (CU's `timeSinceGrounded` is private), allows one
+  air jump; `Wall` refreshes it.
+- **Wall slide/jump:** CU already owns this (with the alternate-wall rule). Removed our duplicate physics;
+  we now only play Hornet's "Wall Slide"/"Walljump" animations (`Body.timeSlidfor` + vy heuristic). If
+  Silksong's repeat-cling behaviour is wanted, patch `Body.Jump`'s `firstWallJump`/`lastJumpedOnRightWall`.
+- Needle art is still procedural; capture colors still washed.
+
 ## Next
-- Re-bake (Silksong restart) to get NeedleThrow/Harpoon animations + effect clips; bake the needle art.
-- Bind/heal, wall cling/slide/jump, double jump; verify pogo.
+- Re-bake (Silksong restart) to get NeedleThrow/Harpoon/DoubleJump/Wall animations + effect clips; bake needle art.
+- Bind/heal; verify pogo/double jump/wall in game.
 - Un-premultiply capture color; tune scale/offset.
 - Optional: live state link.

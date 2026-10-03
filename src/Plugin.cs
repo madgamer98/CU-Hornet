@@ -78,7 +78,7 @@ namespace HornetInCasualties
             SlashReach = Config.Bind("Moves", "SlashReach", 1.4f, "How far in front the slash hits.");
             SlashActive = Config.Bind("Moves", "SlashActive", 0.10f, "When in the clip the hit lands (s before the end).");
             SlashCooldown = Config.Bind("Moves", "SlashCooldown", 0.12f, "Slash cooldown (s).");
-            PogoSpeed = Config.Bind("Moves", "PogoSpeed", 13f, "Upward speed of a pogo bounce.");
+            PogoSpeed = Config.Bind("Moves", "PogoSpeed", 19f, "Upward speed of a pogo bounce.");
             NeedleDamage = Config.Bind("Moves", "NeedleDamage", 10f, "Thrown needle damage.");
             NeedleSpeed = Config.Bind("Moves", "NeedleSpeed", 26f, "Thrown needle speed.");
             NeedleReturnSpeed = Config.Bind("Moves", "NeedleReturnSpeed", 32f, "Needle return speed.");
