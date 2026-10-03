@@ -39,6 +39,7 @@ namespace HornetInCasualties
         internal static ConfigEntry<float> SlashActive;
         internal static ConfigEntry<float> SlashCooldown;
         internal static ConfigEntry<float> PogoSpeed;
+        internal static ConfigEntry<float> PogoHeldBonus;
         internal static ConfigEntry<float> NeedleDamage;
         internal static ConfigEntry<float> NeedleSpeed;
         internal static ConfigEntry<float> NeedleReturnSpeed;
@@ -47,6 +48,7 @@ namespace HornetInCasualties
         internal static ConfigEntry<bool> KinematicMode;
         internal static ConfigEntry<float> MoveSpeed;
         internal static ConfigEntry<float> MoveAccel;
+        internal static ConfigEntry<float> JumpSpeed;
         internal static ConfigEntry<float> DoubleJumpSpeed;
         internal static ConfigEntry<float> WallSlideSpeed;
         internal static ConfigEntry<float> WallJumpX;
@@ -73,7 +75,7 @@ namespace HornetInCasualties
             KeyDash = Config.Bind("Moves", "KeyDash", new KeyboardShortcut(KeyCode.K), "Dash.");
             KeyNeedle = Config.Bind("Moves", "KeyNeedle", new KeyboardShortcut(KeyCode.L), "Throw the needle.");
             KeyBind = Config.Bind("Moves", "KeyBind", new KeyboardShortcut(KeyCode.H), "Bind (heal).");
-            DashSpeed = Config.Bind("Moves", "DashSpeed", 14f, "Dash horizontal speed.");
+            DashSpeed = Config.Bind("Moves", "DashSpeed", 30f, "Dash horizontal speed.");
             DashDuration = Config.Bind("Moves", "DashDuration", 0.55f, "Dash duration (s).");
             DashCooldown = Config.Bind("Moves", "DashCooldown", 0.55f, "Dash cooldown (s).");
             SlashDamage = Config.Bind("Moves", "SlashDamage", 12f, "Slash damage.");
@@ -81,7 +83,8 @@ namespace HornetInCasualties
             SlashReach = Config.Bind("Moves", "SlashReach", 1.4f, "How far in front the slash hits.");
             SlashActive = Config.Bind("Moves", "SlashActive", 0.10f, "When in the clip the hit lands (s before the end).");
             SlashCooldown = Config.Bind("Moves", "SlashCooldown", 0.12f, "Slash cooldown (s).");
-            PogoSpeed = Config.Bind("Moves", "PogoSpeed", 19f, "Upward speed of a pogo bounce.");
+            PogoSpeed = Config.Bind("Moves", "PogoSpeed", 26f, "Upward speed of a pogo bounce.");
+            PogoHeldBonus = Config.Bind("Moves", "PogoHeldBonus", 8f, "Extra pogo speed while holding jump.");
             NeedleDamage = Config.Bind("Moves", "NeedleDamage", 10f, "Thrown needle damage.");
             NeedleSpeed = Config.Bind("Moves", "NeedleSpeed", 26f, "Thrown needle speed.");
             NeedleReturnSpeed = Config.Bind("Moves", "NeedleReturnSpeed", 32f, "Needle return speed.");
@@ -91,7 +94,8 @@ namespace HornetInCasualties
                 "Replace the vanilla ragdoll movement with a kinematic controller (experimental; can sink into floors).");
             MoveSpeed = Config.Bind("Moves", "MoveSpeed", 7.5f, "Kinematic run speed.");
             MoveAccel = Config.Bind("Moves", "MoveAccel", 90f, "Kinematic acceleration.");
-            DoubleJumpSpeed = Config.Bind("Moves", "DoubleJumpSpeed", 12f, "Double jump upward speed.");
+            JumpSpeed = Config.Bind("Moves", "JumpSpeed", 13f, "Hornet ground jump upward speed.");
+            DoubleJumpSpeed = Config.Bind("Moves", "DoubleJumpSpeed", 13f, "Double jump upward speed.");
             WallSlideSpeed = Config.Bind("Moves", "WallSlideSpeed", 2.5f, "Downward speed while wall sliding.");
             WallJumpX = Config.Bind("Moves", "WallJumpX", 11f, "Wall jump horizontal speed.");
             WallJumpY = Config.Bind("Moves", "WallJumpY", 13f, "Wall jump vertical speed.");
@@ -158,15 +162,11 @@ namespace HornetInCasualties
     [HarmonyPatch(typeof(Body), "Jump")]
     internal static class BodyJumpPatch
     {
-        private static readonly AccessTools.FieldRef<Body, bool> FirstWallJump =
-            AccessTools.FieldRefAccess<Body, bool>("firstWallJump");
-
-        private static void Prefix(Body __instance)
+        // Hornet owns jumping (ground/double/wall) so the ragdoll's flaky grounded flag can't
+        // trigger repeated vanilla jumps. Returning false skips CU's Jump entirely.
+        private static bool Prefix()
         {
-            if (Plugin.EnableMoves.Value)
-            {
-                FirstWallJump(__instance) = true;
-            }
+            return !Plugin.EnableMoves.Value;
         }
     }
 
