@@ -82,8 +82,16 @@ namespace HornetInCasualties
             }
             _dashTime -= Time.fixedDeltaTime;
             _rb.gravityScale = 0f;
-            _rb.MovePosition(_rb.position + new Vector2(_dashDir * Plugin.DashSpeed.Value * Time.fixedDeltaTime, 0f));
-            PuppetRagdoll();
+            if (Plugin.KinematicMode.Value)
+            {
+                _rb.MovePosition(_rb.position + new Vector2(_dashDir * Plugin.DashSpeed.Value * Time.fixedDeltaTime, 0f));
+                PuppetRagdoll();
+            }
+            else
+            {
+                // Vanilla movement still runs; the lifted speed cap lets this velocity stick.
+                _rb.velocity = new Vector2(_dashDir * Plugin.DashSpeed.Value, 0f);
+            }
             if (_dashTime <= 0f)
             {
                 _rb.gravityScale = 1f;

@@ -87,8 +87,8 @@ namespace HornetInCasualties
             NeedleReturnSpeed = Config.Bind("Moves", "NeedleReturnSpeed", 32f, "Needle return speed.");
             NeedleRange = Config.Bind("Moves", "NeedleRange", 9f, "Distance before the needle returns.");
             NeedleCooldown = Config.Bind("Moves", "NeedleCooldown", 0.35f, "Needle throw cooldown (s).");
-            KinematicMode = Config.Bind("Moves", "KinematicMode", true,
-                "Replace the vanilla ragdoll movement with a clean kinematic controller (fixes dash/pogo).");
+            KinematicMode = Config.Bind("Moves", "KinematicMode", false,
+                "Replace the vanilla ragdoll movement with a kinematic controller (experimental; can sink into floors).");
             MoveSpeed = Config.Bind("Moves", "MoveSpeed", 7.5f, "Kinematic run speed.");
             MoveAccel = Config.Bind("Moves", "MoveAccel", 90f, "Kinematic acceleration.");
             DoubleJumpSpeed = Config.Bind("Moves", "DoubleJumpSpeed", 12f, "Double jump upward speed.");
