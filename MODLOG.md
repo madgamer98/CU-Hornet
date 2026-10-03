@@ -256,8 +256,27 @@ driving it headless is the full SkyCraft build.
   stay dynamic with colliders enabled; each FixedUpdate their velocity is set to the body's, so collision
   works and the ragdoll can't flop. (`PuppetRagdoll`.)
 
-## Next
-- Verify kinematic movement in the sandbox; fix grounded/standing if needed.
+## LIVE PASSTHROUGH WORKING (branch `passthrough-live`, 2026-10-02)
+Both games run at once and exchange state over shared memory `Local\HornetPassthrough_v1`
+(`shared/PassthroughProtocol.cs`, compiled into both plugins).
+- **Host (CU):** `src/LiveLink.cs` publishes the player's position/velocity/facing/grounded and draws
+  Hornet from the published frame. `LiveMode=true` fully disables the old baked port.
+- **Guest (Silksong):** `silksong/src/LiveLink.cs` reads host state, drives Hornet's `tk2dSpriteAnimator`
+  (Idle/Run/Airborne/Fall), and publishes her frame.
+- **Capture:** the **main-camera diff** (Hornet visible vs hidden) with cached buffers (one screen RT +
+  one region tex, no per-call allocation), throttled to ~half rate. This is lit (uses the game's own
+  camera/lights) and transparent (background cancels). A dedicated Hornet-layer camera was tried first:
+  every layer 8-31 is named in Silksong (30="Physical Push React", 31="Attack Detector") and there is
+  no free layer, and the offscreen camera excluded the 2D lights, so Hornet rendered dark on an opaque
+  clear — abandoned.
+- **`Application.runInBackground = true`** on both sides is required: CU pauses unfocused otherwise and
+  stops reading frames.
+- **Verified:** CU log `received live Hornet frame 215x184`; screenshot shows lit Hornet in the sandbox.
+- Silksong layers dump: 0/1/2/4/5/7 Default..Attack Detector (listed in the log).
+
+## Next (passthrough)
+- Tune live position/scale/pivot; hide the vanilla body in LiveMode; raise publish rate / cut latency.
+- Then delete the old baked-import code (`HornetData`, baked `HornetAvatar`, `HornetController`, configs).
 - Bind/heal; verify pogo/double jump/wall in game.
 - Un-premultiply capture color; tune scale/offset.
 - Optional: live state link.
