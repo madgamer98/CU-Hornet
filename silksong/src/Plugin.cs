@@ -25,6 +25,8 @@ namespace HornetExporter
         private void Awake()
         {
             Log = Logger;
+            // Keep Silksong simulating while the host game is focused.
+            Application.runInBackground = true;
             _harmony = new Harmony(Guid);
             _harmony.PatchAll();
 

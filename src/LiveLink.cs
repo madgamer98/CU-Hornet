@@ -20,6 +20,7 @@ namespace HornetInCasualties
         private Transform _displayT;
         private int _lastW, _lastH;
         private bool _loggedFrame;
+        private int _diag;
 
         public void Init(Body body)
         {
@@ -49,6 +50,14 @@ namespace HornetInCasualties
             if (_link == null || _body == null)
             {
                 return;
+            }
+
+            _diag++;
+            if (_diag % 120 == 0)
+            {
+                Plugin.Log.LogInfo("LiveLink diag: fid=" + _link.DebugFrameId + " w=" + _link.DebugWidth +
+                                   " seq=" + _link.DebugSeq + " hasPx=" + _link.DebugHasPixels +
+                                   " silkAlive=" + _link.SilkAlive());
             }
 
             _link.Heartbeat();

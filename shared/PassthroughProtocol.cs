@@ -236,6 +236,11 @@ namespace HornetPassthrough
             return true;
         }
 
+        public int DebugFrameId { get { return ReadInt(Proto.FrameMetaOffset + Proto.FO_FrameId); } }
+        public int DebugWidth { get { return ReadInt(Proto.FrameMetaOffset + Proto.FO_Width); } }
+        public int DebugSeq { get { return ReadInt(Proto.FrameMetaOffset + Proto.FO_Seq); } }
+        public int DebugHasPixels { get { return ReadInt(Proto.FrameMetaOffset + Proto.FO_HasPixels); } }
+
         public bool SilkAlive(int withinMs = 1500)
         {
             long hb = ReadLong(Proto.HeaderOffset + Proto.HO_SilkHeartbeat);

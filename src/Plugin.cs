@@ -61,6 +61,8 @@ namespace HornetInCasualties
         {
             Instance = this;
             Log = Logger;
+            // The passthrough requires both games to keep simulating while one is unfocused.
+            Application.runInBackground = true;
             Enable = Config.Bind("General", "Enable", true, "Draw Hornet on the player.");
             HideVanillaBody = Config.Bind("General", "HideVanillaBody", true,
                 "Hide the vanilla experiment's body sprites while Hornet is shown.");
