@@ -13,6 +13,88 @@ namespace HornetExporter
     {
         private const int Pad = 110;
 
+        private const int CaptureLayer = 30;
+        private const int CapSize = 256;
+        private static Camera _capCam;
+        private static RenderTexture _capRt;
+        private static Texture2D _capTex;
+        private static bool _layerSet;
+
+        private static void EnsureCaptureCamera()
+        {
+            if (_capCam != null)
+            {
+                return;
+            }
+            var go = new GameObject("HornetCaptureCam");
+            Object.DontDestroyOnLoad(go);
+            _capCam = go.AddComponent<Camera>();
+            _capCam.enabled = false;
+            _capCam.orthographic = true;
+            _capCam.clearFlags = CameraClearFlags.SolidColor;
+            _capCam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+            _capCam.cullingMask = 1 << CaptureLayer;
+            _capRt = new RenderTexture(CapSize, CapSize, 16, RenderTextureFormat.ARGB32);
+            _capRt.Create();
+            _capCam.targetTexture = _capRt;
+            _capTex = new Texture2D(CapSize, CapSize, TextureFormat.RGBA32, false);
+        }
+
+        /// <summary>
+        /// Cheap isolated capture: a dedicated camera on a Hornet-only layer renders her into a
+        /// small RenderTexture. No full-screen readback, no diff, so it is safe to call often.
+        /// </summary>
+        public static bool CaptureIsolatedRgba(out byte[] rgba, out int width, out int height,
+            out float pivotX, out float pivotY, out float worldX, out float worldY)
+        {
+            rgba = null;
+            width = height = 0;
+            pivotX = pivotY = worldX = worldY = 0f;
+
+            HeroController hero = HeroController.instance;
+            if (hero == null)
+            {
+                return false;
+            }
+            EnsureCaptureCamera();
+            if (_capCam == null)
+            {
+                return false;
+            }
+
+            if (!_layerSet)
+            {
+                SetLayerRecursive(hero.gameObject, CaptureLayer);
+                _layerSet = true;
+            }
+
+            Bounds b = GetBounds(hero);
+            Vector3 center = b.center;
+            float half = Mathf.Max(b.extents.y, b.extents.x) + 0.4f;
+            _capCam.transform.position = new Vector3(center.x, center.y, -10f);
+            _capCam.transform.rotation = Quaternion.identity;
+            _capCam.orthographicSize = Mathf.Max(half, 1f);
+            _capCam.Render();
+
+            RenderTexture prev = RenderTexture.active;
+            RenderTexture.active = _capRt;
+            _capTex.ReadPixels(new Rect(0, 0, CapSize, CapSize), 0, 0);
+            _capTex.Apply();
+            RenderTexture.active = prev;
+
+            rgba = _capTex.GetRawTextureData<byte>().ToArray();
+            width = CapSize;
+            height = CapSize;
+
+            Vector3 p = hero.transform.position;
+            worldX = p.x;
+            worldY = p.y;
+            float span = _capCam.orthographicSize;
+            pivotX = 0.5f + (p.x - center.x) / (2f * span);
+            pivotY = 0.5f + (p.y - center.y) / (2f * span);
+            return true;
+        }
+
         /// <summary>Capture Hornet isolated and return raw RGBA32 bytes (bottom-up, Unity order).</summary>
         public static bool CaptureRgba(out byte[] rgba, out int width, out int height, out float pivotX,
             out float pivotY, out float worldX, out float worldY)
@@ -296,6 +378,15 @@ namespace HornetExporter
                 }
             }
             return bounds;
+        }
+
+        private static void SetLayerRecursive(GameObject go, int layer)
+        {
+            go.layer = layer;
+            for (int i = 0; i < go.transform.childCount; i++)
+            {
+                SetLayerRecursive(go.transform.GetChild(i).gameObject, layer);
+            }
         }
 
         private static List<Renderer> VisibleRenderers(HeroController hero)

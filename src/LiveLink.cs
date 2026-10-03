@@ -5,7 +5,7 @@ namespace HornetInCasualties
 {
     /// <summary>
     /// Live passthrough (Casualties side, the host). Publishes the player's state and displays
-    /// Hornet from Silksong's published frame. No baked assets are used here.
+    /// Hornet's isolated frame published by Silksong. No baked assets are used.
     /// </summary>
     public class LiveLink : MonoBehaviour
     {
@@ -19,7 +19,7 @@ namespace HornetInCasualties
         private SpriteRenderer _display;
         private Transform _displayT;
         private int _lastW, _lastH;
-        private string _lastClip;
+        private bool _loggedFrame;
 
         public void Init(Body body)
         {
@@ -57,24 +57,13 @@ namespace HornetInCasualties
             Vector3 p = _body.transform.position;
             _link.WriteCuState(p.x, p.y, vx, vy, _body.isRight ? 1 : -1, _body.grounded, 1);
 
-            string clip;
-            int frame, facing, frameId;
-            bool hasPixels;
-            _link.ReadLive(out clip, out frame, out facing, out frameId, out hasPixels);
-            if (frameId != _lastFrameId)
+            int w, h, fid;
+            float px, py, wx, wy;
+            if (_link.ReadFrame(_buf, out w, out h, out px, out py, out wx, out wy, out fid, ref _lastFrameId))
             {
-                _lastFrameId = frameId;
-                if (hasPixels)
+                if (w > 1 && h > 1)
                 {
-                    ReadAndShowPixels();
-                }
-                else
-                {
-                    if (clip != _lastClip)
-                    {
-                        _lastClip = clip;
-                        Plugin.Log.LogInfo("LiveLink: Silksong clip " + clip + " frame " + frame);
-                    }
+                    ApplyFrame(w, h, px, py);
                 }
             }
 
@@ -91,15 +80,8 @@ namespace HornetInCasualties
             }
         }
 
-        private void ReadAndShowPixels()
+        private void ApplyFrame(int w, int h, float px, float py)
         {
-            int w, h, fid;
-            float px, py, wx, wy;
-            int local = _lastFrameId;
-            if (!_link.ReadFrame(_buf, out w, out h, out px, out py, out wx, out wy, out fid, ref local) || w <= 1 || h <= 1)
-            {
-                return;
-            }
             if (_tex == null || _lastW != w || _lastH != h)
             {
                 _lastW = w;
@@ -108,11 +90,15 @@ namespace HornetInCasualties
                 _tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
                 _display.sprite = Sprite.Create(_tex, new Rect(0, 0, w, h), new Vector2(px, py), 64f);
                 _display.enabled = true;
-                Plugin.Log.LogInfo("LiveLink: pixel frame " + w + "x" + h + " from Silksong");
             }
             System.Array.Copy(_buf, 0, _frameBytes, 0, _frameBytes.Length);
             _tex.LoadRawTextureData(_frameBytes);
             _tex.Apply();
+            if (!_loggedFrame)
+            {
+                _loggedFrame = true;
+                Plugin.Log.LogInfo("LiveLink: received live Hornet frame " + w + "x" + h);
+            }
         }
 
         private void OnDestroy()

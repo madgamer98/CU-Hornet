@@ -14,6 +14,8 @@ namespace HornetExporter
         private tk2dSpriteAnimator _anim;
         private int _lastClipHash;
         private int _frameCounter;
+        private int _publishTick;
+        private bool _capLogged;
 
         private void Awake()
         {
@@ -74,8 +76,33 @@ namespace HornetExporter
             string live = _anim != null && _anim.CurrentClip != null ? _anim.CurrentClip.name : clip;
             int frame = _anim != null ? _anim.CurrentFrame : 0;
 
-            // State-only for now (safe). Pixel capture will be reintroduced throttled once stable.
-            _link.WriteLive(live, frame, facing, _frameCounter++);
+            // Publish the isolated frame at ~half rate. Cheap dedicated-camera capture (no diff).
+            if ((_publishTick++ & 1) == 0)
+            {
+                try
+                {
+                    byte[] rgba;
+                    int w, h;
+                    float px, py, wx, wy;
+                    if (HornetCapture.CaptureIsolatedRgba(out rgba, out w, out h, out px, out py, out wx, out wy))
+                    {
+                        _link.WriteFrame(rgba, w, h, px, py, wx, wy, hash);
+                        if (!_capLogged)
+                        {
+                            _capLogged = true;
+                            Plugin.Log.LogInfo("LiveLink: publishing isolated frames " + w + "x" + h);
+                        }
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    if (!_capLogged)
+                    {
+                        _capLogged = true;
+                        Plugin.Log.LogError("LiveLink capture failed: " + e);
+                    }
+                }
+            }
         }
 
         private void OnDestroy()
