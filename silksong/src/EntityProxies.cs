@@ -100,13 +100,12 @@ namespace HornetExporter
                 {
                     relay.EntityId = Mathf.RoundToInt(Values[v + 0]);
                 }
-                // S4 phase 3: a CU biter asks us to damage Hornet on contact.
-                DamageHero dh = go.GetComponent<DamageHero>();
-                if (dh != null)
+                // S4 phase 3: a CU biter asks us to damage Hornet on contact (explicit TakeDamage call).
+                ContactDamage cd = go.GetComponent<ContactDamage>();
+                if (cd != null)
                 {
-                    bool contact = (flags & Proto.EntFlagContactDamage) != 0;
-                    dh.hazardType = HazardType.ENEMY;
-                    dh.damageDealt = contact ? ContactDamageAmount : 0;
+                    cd.Damage = ContactDamageAmount;
+                    cd.SetContact((flags & Proto.EntFlagContactDamage) != 0);
                 }
             }
             for (int i = count; i < Pool.Count; i++)
@@ -165,8 +164,7 @@ namespace HornetExporter
                 go.transform.SetParent(_root.transform, false);
                 go.AddComponent<BoxCollider2D>();
                 go.AddComponent<ProxyRelay>();
-                DamageHero dh = go.AddComponent<DamageHero>();
-                dh.damageDealt = 0; // enabled per-entity from the contact-damage flag
+                go.AddComponent<ContactDamage>();
                 Pool.Add(go);
             }
         }

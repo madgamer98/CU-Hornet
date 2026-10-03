@@ -112,10 +112,13 @@ namespace HornetExporter
             {
                 string clip = _anim != null && _anim.CurrentClip != null ? _anim.CurrentClip.name : "?";
                 Vector2 v = _rb != null ? _rb.linearVelocity : Vector2.zero;
+                PlayerData pd = PlayerData.instance;
+                string hp = pd != null ? pd.health + "/" + pd.maxHealth : "?";
                 Plugin.Log.LogInfo("LiveLink state: clip=" + clip + " vel=(" + v.x.ToString("0.0") +
                                    "," + v.y.ToString("0.0") + ") pos=" + hero.transform.position.x.ToString("0.0") +
                                    "," + hero.transform.position.y.ToString("0.0") +
                                    " gnd=" + hero.CheckTouchingGround() +
+                                   " hp=" + hp +
                                    " in=0x" + InjectedButtons.ToString("X"));
             }
 

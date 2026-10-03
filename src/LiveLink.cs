@@ -37,6 +37,8 @@ namespace HornetInCasualties
 
         private readonly float[] _entBuf = new float[Proto.MaxEntities * Proto.EntityStrideFloats];
         private readonly Collider2D[] _entHits = new Collider2D[256];
+        private readonly List<Collider2D> _entCols = new List<Collider2D>();
+        private readonly HashSet<int> _entSeen = new HashSet<int>();
         private readonly List<GameObject> _dummies = new List<GameObject>();
         private readonly List<float> _dummyHp = new List<float>();
         private readonly Dictionary<int, BuildingEntity> _entityById = new Dictionary<int, BuildingEntity>();
@@ -381,6 +383,7 @@ namespace HornetInCasualties
 
             Vector2 c = _body.transform.position;
             PruneEntityMap();
+            _entSeen.Clear();
             int n = Physics2D.OverlapCircleNonAlloc(c, 30f, _entHits, ~0);
             for (int i = 0; i < n && count < Proto.MaxEntities; i++)
             {
@@ -394,7 +397,25 @@ namespace HornetInCasualties
                 {
                     continue;
                 }
+                // A single actor has several colliders; publish it once or the proxy count (and the
+                // contact damage Hornet takes) multiplies per limb.
+                int eid = be.GetInstanceID() & 0xFFFFFF;
+                if (!_entSeen.Add(eid))
+                {
+                    continue;
+                }
+                // One proxy covering the whole actor, centred on its combined collider bounds.
                 Bounds b = col.bounds;
+                _entCols.Clear();
+                be.GetComponentsInChildren(true, _entCols);
+                for (int ci = 0; ci < _entCols.Count; ci++)
+                {
+                    Collider2D cc = _entCols[ci];
+                    if (cc != null && cc.enabled)
+                    {
+                        b.Encapsulate(cc.bounds);
+                    }
+                }
                 int flags = Proto.EntFlagAlive;
                 if (be.animal)
                 {
@@ -406,7 +427,6 @@ namespace HornetInCasualties
                 {
                     flags |= Proto.EntFlagContactDamage;
                 }
-                int eid = be.GetInstanceID() & 0xFFFFFF;
                 _entityById[eid] = be;
                 AddEnt(ref count, eid, b.center.x, b.center.y,
                     b.size.x, b.size.y, be.health, be.health, flags);
