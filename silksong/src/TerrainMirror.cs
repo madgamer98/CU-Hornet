@@ -160,6 +160,19 @@ namespace HornetExporter
             return true;
         }
 
+        public static bool TryMapToSilk(Vector2 cu, out Vector2 silk)
+        {
+            if (_root == null || _k <= 0.0001f)
+            {
+                silk = Vector2.zero;
+                return false;
+            }
+            silk = new Vector2(
+                _silkOrigin.x + (cu.x - _cuOrigin.x) * _k,
+                _silkOrigin.y + (cu.y - _cuOrigin.y) * _k);
+            return true;
+        }
+
         private static int HashRects(int count)
         {
             int h = count * 397;

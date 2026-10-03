@@ -82,6 +82,7 @@ namespace HornetExporter
                 Plugin.Log.LogWarning("LiveLink: host heartbeat lost; restoring vanilla terrain.");
                 TerrainMirror.Restore();
             }
+            EntityProxies.Poll(_link);
             float cuX, cuY;
             bool active = TerrainMirror.TryMapToCu(hero.transform.position, out cuX, out cuY);
             Vector2 hv = _rb != null ? _rb.linearVelocity : Vector2.zero;

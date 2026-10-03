@@ -429,3 +429,23 @@ clean "blank slate" Hornet-only visual passthrough, and correct scaling. Full pl
 channel; pogo via a lightweight layer-17/19 proxy hitting `HeroDownAttack.ContinueBounceTrigger`
 (no heavyweight `HealthManager`); Hornet damage via proxy `DamageHero`; dedicated capture camera for the
 blank slate (biggest unknown is lighting); one fixed capture PPU driving CU's display scale from `k`.
+
+## S4 phase 1 — pogo off an entity proxy (2026-10-03, VERIFIED)
+Protocol v5 adds an `Entities` region (CU -> Silksong): up to 64 fixed records (`id, x, y, w, h, hp,
+maxHp, flags`), revisioned.
+- **CU (`src/LiveLink.cs`):** every 0.25 s publishes nearby actors — real `BuildingEntity`s
+  (`Physics2D.OverlapCircleNonAlloc`, radius 30) plus debug **pogo dummies** (F7 spawns one just below
+  the player; a visible red square, id 9000+).
+- **Silksong (`silksong/src/EntityProxies.cs`):** maps each entity through the S2 fixed mapping and pools
+  trigger `BoxCollider2D` proxies. Layer is adaptive: **19 (`INTERACTIVE_OBJECT`)** when the physics
+  matrix allows `17<->19` (it does here; 17 = the attack layer), else 17. Layer 19/17 makes
+  `HeroDownAttack.ContinueBounceTrigger` run its direct path — **no `HealthManager` required**.
+- **Evidence (`silksong/src/PogoProbe.cs`):** Harmony postfix on `HeroController.DownspikeBounce` logs
+  `POGO! DownspikeBounce fired.`
+- **Verified:** the human pogoed on the streamed dummy; log shows `POGO! DownspikeBounce fired.` ×8 —
+  Hornet's genuine down-spike bounce triggers off a CU-streamed entity.
+- **Notes:** the training sandbox has no `BuildingEntity` (SandboxCourse only spawns a terminal), so the
+  test used the synthetic dummy; pogo off a *real* CU enemy still needs a run. Auto-testing the pogo by
+  timed keys was unreliable (jump timing), but manual play proves the path.
+- **Next (phase 2):** `Events` ring (Silk→CU) so Hornet's hits apply CU damage — relay via
+  `DamageEnemies.HitResponded` or a proxy hit relay, plus CU damage numbers.

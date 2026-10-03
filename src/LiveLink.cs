@@ -36,6 +36,12 @@ namespace HornetInCasualties
         private readonly Collider2D[] _overlapBuf = new Collider2D[Proto.MaxRects];
         private static readonly int GroundMask = LayerMask.GetMask("Ground");
 
+        private readonly float[] _entBuf = new float[Proto.MaxEntities * Proto.EntityStrideFloats];
+        private readonly Collider2D[] _entHits = new Collider2D[256];
+        private readonly List<GameObject> _dummies = new List<GameObject>();
+        private Sprite _dummySprite;
+        private int _entRev;
+
         public void Init(Body body)
         {
             _body = body;
@@ -120,6 +126,12 @@ namespace HornetInCasualties
             {
                 _terrainTimer = 0.25f;
                 PublishTerrain();
+                PublishEntities();
+            }
+
+            if (Plugin.DebugKeys.Value && Input.GetKeyDown(KeyCode.F7))
+            {
+                SpawnDummy();
             }
 
             int w, h, fid;
@@ -298,6 +310,94 @@ namespace HornetInCasualties
 
             _terrainRev++;
             _link.WriteTerrain(cb.size.y, _rectBuf, count, _terrainRev);
+        }
+
+        /// <summary>Spawn a visible dummy near the player to pogo off (F7 in the sandbox).</summary>
+        private void SpawnDummy()
+        {
+            if (_body == null)
+            {
+                return;
+            }
+            if (_dummySprite == null)
+            {
+                var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+                tex.SetPixel(0, 0, Color.white);
+                tex.Apply();
+                _dummySprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+            }
+            var go = new GameObject("HornetPogoDummy");
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = _dummySprite;
+            sr.color = new Color(1f, 0.35f, 0.25f, 0.95f);
+            sr.sortingOrder = 6000;
+            go.transform.localScale = new Vector3(1.2f, 1.2f, 1f);
+            go.transform.position = _body.transform.position + new Vector3(0f, -0.4f, 0f);
+            _dummies.Add(go);
+            Plugin.Log.LogInfo("Spawned pogo dummy at " + go.transform.position);
+        }
+
+        /// <summary>Publish nearby CU actors (pogo dummies + real BuildingEntities) for Silksong proxies.</summary>
+        private void PublishEntities()
+        {
+            if (_body == null)
+            {
+                return;
+            }
+            int count = 0;
+            for (int i = 0; i < _dummies.Count && count < Proto.MaxEntities; i++)
+            {
+                GameObject d = _dummies[i];
+                if (d == null)
+                {
+                    continue;
+                }
+                Vector3 p = d.transform.position;
+                AddEnt(ref count, 9000 + i, p.x, p.y, 1.2f, 1.2f, 100f, 100f,
+                    Proto.EntFlagBounceable | Proto.EntFlagAlive);
+            }
+
+            Vector2 c = _body.transform.position;
+            int n = Physics2D.OverlapCircleNonAlloc(c, 30f, _entHits, ~0);
+            for (int i = 0; i < n && count < Proto.MaxEntities; i++)
+            {
+                Collider2D col = _entHits[i];
+                if (col == null)
+                {
+                    continue;
+                }
+                BuildingEntity be = col.GetComponentInParent<BuildingEntity>();
+                if (be == null || be.health <= 0.5f)
+                {
+                    continue;
+                }
+                Bounds b = col.bounds;
+                int flags = Proto.EntFlagAlive;
+                if (be.animal)
+                {
+                    flags |= Proto.EntFlagBounceable;
+                }
+                AddEnt(ref count, be.GetInstanceID() & 0xFFFFFF, b.center.x, b.center.y,
+                    b.size.x, b.size.y, be.health, be.health, flags);
+            }
+
+            _entRev++;
+            _link.WriteEntities(_entBuf, count, _entRev);
+        }
+
+        private void AddEnt(ref int count, int id, float x, float y, float w, float h,
+            float hp, float maxHp, int flags)
+        {
+            int v = count * Proto.EntityStrideFloats;
+            _entBuf[v + 0] = id;
+            _entBuf[v + 1] = x;
+            _entBuf[v + 2] = y;
+            _entBuf[v + 3] = w;
+            _entBuf[v + 4] = h;
+            _entBuf[v + 5] = hp;
+            _entBuf[v + 6] = maxHp;
+            _entBuf[v + 7] = flags;
+            count++;
         }
 
         // Hide the vanilla experiment's sprites the same way the baked port did.

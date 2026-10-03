@@ -15,7 +15,7 @@ namespace HornetPassthrough
     {
         public const string MappingName = "Local\\HornetPassthrough_v1";
         public const uint Magic = 0x48505431; // "HPT1"
-        public const int Version = 4;
+        public const int Version = 5;
 
         public const int HeaderOffset = 0;
         public const int HeaderSize = 64;
@@ -36,7 +36,14 @@ namespace HornetPassthrough
         public const int TerrainSize = TerrainHeaderSize + MaxRects * 16;
         public const int PlayerStateOffset = TerrainOffset + TerrainSize;
         public const int PlayerStateSize = 64;
-        public const long MappingSize = PlayerStateOffset + PlayerStateSize;
+        public const int EntitiesOffset = PlayerStateOffset + PlayerStateSize;
+        public const int EntityHeaderSize = 16;
+        public const int MaxEntities = 64;
+        public const int EntityStrideFloats = 8; // id, x, y, w, h, hp, maxHp, flags
+        public const int EntityRecordSize = EntityStrideFloats * 4;
+        public const int EntitiesRecordsOffset = EntitiesOffset + EntityHeaderSize;
+        public const int EntitiesSize = EntityHeaderSize + MaxEntities * EntityRecordSize;
+        public const long MappingSize = EntitiesOffset + EntitiesSize;
 
         // Raw button bits (Input region, CU -> Silksong). Mirrors the host's real binds.
         public const int BtnLeft = 1 << 0;
@@ -110,6 +117,16 @@ namespace HornetPassthrough
         public const int PS_Grounded = 20;   // 0/1
         public const int PS_Active = 24;     // 1 when the mirror/mapping is live
         public const int PS_Seq = 28;        // int seqlock
+
+        // Entities (CU -> Silksong): nearby actors as fixed records; see EntityStrideFloats.
+        public const int EH_Revision = 0;    // int, bumps when the set changes
+        public const int EH_Count = 4;
+        public const int EH_Seq = 8;         // int seqlock
+
+        // Entity flags
+        public const int EntFlagBounceable = 1 << 0;
+        public const int EntFlagContactDamage = 1 << 1;
+        public const int EntFlagAlive = 1 << 2;
     }
 
     /// <summary>Thin wrapper over the mapping with float/int helpers.</summary>
@@ -297,6 +314,61 @@ namespace HornetPassthrough
             active = ReadInt(Proto.PlayerStateOffset + Proto.PS_Active) != 0;
             int seq2 = ReadInt(Proto.PlayerStateOffset + Proto.PS_Seq);
             return seq1 == seq2;
+        }
+
+        // ---- Entities (CU -> Silksong) ----
+        /// <summary>Publish nearby actors. values is EntityStrideFloats per entity.</summary>
+        public void WriteEntities(float[] values, int count, int revision)
+        {
+            int seq = ReadInt(Proto.EntitiesOffset + Proto.EH_Seq);
+            WriteInt(Proto.EntitiesOffset + Proto.EH_Seq, seq + 1);
+            WriteInt(Proto.EntitiesOffset + Proto.EH_Revision, revision);
+            WriteInt(Proto.EntitiesOffset + Proto.EH_Count, count);
+            int n = System.Math.Min(count, Proto.MaxEntities);
+            for (int i = 0; i < n; i++)
+            {
+                int at = Proto.EntitiesRecordsOffset + i * Proto.EntityRecordSize;
+                int v = i * Proto.EntityStrideFloats;
+                for (int f = 0; f < Proto.EntityStrideFloats; f++)
+                {
+                    WriteFloat(at + f * 4, values[v + f]);
+                }
+            }
+            WriteInt(Proto.EntitiesOffset + Proto.EH_Seq, seq + 2);
+        }
+
+        public bool ReadEntities(float[] values, out int count, out int revision, ref int lastRevision)
+        {
+            count = 0;
+            revision = ReadInt(Proto.EntitiesOffset + Proto.EH_Revision);
+            if (revision == lastRevision)
+            {
+                return false;
+            }
+            int seq1 = ReadInt(Proto.EntitiesOffset + Proto.EH_Seq);
+            if ((seq1 & 1) != 0)
+            {
+                return false;
+            }
+            count = ReadInt(Proto.EntitiesOffset + Proto.EH_Count);
+            int n = System.Math.Min(count, Proto.MaxEntities);
+            for (int i = 0; i < n; i++)
+            {
+                int at = Proto.EntitiesRecordsOffset + i * Proto.EntityRecordSize;
+                int v = i * Proto.EntityStrideFloats;
+                for (int f = 0; f < Proto.EntityStrideFloats; f++)
+                {
+                    values[v + f] = ReadFloat(at + f * 4);
+                }
+            }
+            int seq2 = ReadInt(Proto.EntitiesOffset + Proto.EH_Seq);
+            if (seq1 != seq2)
+            {
+                return false;
+            }
+            count = n;
+            lastRevision = revision;
+            return true;
         }
 
         // ---- Frame ----
