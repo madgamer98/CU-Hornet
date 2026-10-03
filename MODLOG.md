@@ -421,3 +421,11 @@ Protocol bumped to `Version = 4`; adds a `PlayerState` region (Silksong -> CU) c
     enemies aren't mirrored yet.
 - **Next:** mirrors only static `Ground` geometry; to get wall/pogo gameplay we'd mirror more layers and
   entities. Otherwise the milestone set is done (showcase intentionally skipped).
+
+## S4 scope written (2026-10-03)
+Human wants the next milestone scoped (not built yet): pogo off CU enemies, damage sync both ways, a
+clean "blank slate" Hornet-only visual passthrough, and correct scaling. Full plan + decomp mechanics in
+**`S4-SCOPE.md`**. Highlights: entity proxies over a new `Entities` (CU→Silk) + `Events` (Silk→CU)
+channel; pogo via a lightweight layer-17/19 proxy hitting `HeroDownAttack.ContinueBounceTrigger`
+(no heavyweight `HealthManager`); Hornet damage via proxy `DamageHero`; dedicated capture camera for the
+blank slate (biggest unknown is lighting); one fixed capture PPU driving CU's display scale from `k`.
