@@ -550,6 +550,8 @@ namespace HornetPassthrough
         public int DebugWidth { get { return ReadInt(Proto.FrameMetaOffset + Proto.FO_Width); } }
         public int DebugSeq { get { return ReadInt(Proto.FrameMetaOffset + Proto.FO_Seq); } }
         public int DebugHasPixels { get { return ReadInt(Proto.FrameMetaOffset + Proto.FO_HasPixels); } }
+        public int DebugPlayerSeq { get { return ReadInt(Proto.PlayerStateOffset + Proto.PS_Seq); } }
+        public int DebugTerrainSeq { get { return ReadInt(Proto.TerrainOffset + Proto.TH_Seq); } }
 
         public bool SilkAlive(int withinMs = 1500)
         {

@@ -131,6 +131,14 @@ namespace HornetExporter
             {
                 return;
             }
+            // Terrain chunks stream in as she moves and re-enable their own colliders, which would
+            // let the real Silksong level support her instead of the CU mirror. Keep them suppressed.
+            _sweepTimer -= Time.deltaTime;
+            if (_sweepTimer <= 0f)
+            {
+                _sweepTimer = 0.5f;
+                SweepVanilla();
+            }
             int count, revision;
             float playerHeight, anchorX, anchorY;
             if (!l.ReadTerrain(Rects, out count, out revision, out playerHeight,
@@ -147,6 +155,37 @@ namespace HornetExporter
             BuildBoxes(count);
         }
 
+        private static float _sweepTimer;
+
+        private static void SweepVanilla()
+        {
+            Collider2D[] cols = UnityEngine.Object.FindObjectsByType<Collider2D>(FindObjectsSortMode.None);
+            int n = 0;
+            for (int i = 0; i < cols.Length; i++)
+            {
+                Collider2D c = cols[i];
+                if (c == null || !c.enabled)
+                {
+                    continue;
+                }
+                if (_root != null && c.transform.IsChildOf(_root.transform))
+                {
+                    continue;
+                }
+                int layer = c.gameObject.layer;
+                if (layer == TerrainLayer || layer == HeroDetectorLayer)
+                {
+                    c.enabled = false;
+                    Disabled.Add(c);
+                    n++;
+                }
+            }
+            if (n > 0)
+            {
+                Plugin.Log.LogInfo("TerrainMirror: re-disabled " + n + " newly streamed terrain colliders.");
+            }
+        }
+
         public static bool TryMapToCu(Vector2 silk, out float cuX, out float cuY)
         {
             if (_root == null || _k <= 0.0001f)
@@ -158,6 +197,67 @@ namespace HornetExporter
             cuX = _cuOrigin.x + (silk.x - _silkOrigin.x) / _k;
             cuY = _cuOrigin.y + (silk.y - _silkOrigin.y) / _k;
             return true;
+        }
+
+        // ---- Diagnostic: is there floor under Hornet, and where? (stair fall-through hunt) ----
+        private static float _diagTimer;
+        private static bool _wasGrounded = true;
+
+        public static void Diag(float dt)
+        {
+            if (_root == null)
+            {
+                return;
+            }
+            HeroController hero = HeroController.instance;
+            if (hero == null)
+            {
+                return;
+            }
+            Collider2D col = hero.GetComponent<Collider2D>();
+            if (col == null)
+            {
+                return;
+            }
+            bool grounded = hero.CheckTouchingGround();
+            _diagTimer += dt;
+            bool tick = _diagTimer >= 1f;
+            if ((_wasGrounded && !grounded) || tick)
+            {
+                if (tick)
+                {
+                    _diagTimer = 0f;
+                }
+                Bounds hb = col.bounds;
+                Vector2 feet = new Vector2(hb.center.x, hb.min.y);
+                float top = float.NegativeInfinity;
+                int active = 0;
+                for (int i = 0; i < Pool.Count; i++)
+                {
+                    BoxCollider2D b = Pool[i];
+                    if (b == null || !b.gameObject.activeSelf)
+                    {
+                        continue;
+                    }
+                    active++;
+                    Bounds bb = b.bounds;
+                    if (feet.x >= bb.min.x - 0.15f && feet.x <= bb.max.x + 0.15f &&
+                        bb.max.y <= feet.y + 0.8f && bb.max.y > top)
+                    {
+                        top = bb.max.y;
+                    }
+                }
+                string floorTop = top == float.NegativeInfinity ? "NONE" : top.ToString("0.00");
+                string gap = top == float.NegativeInfinity ? "?" : (feet.y - top).ToString("0.00");
+                string tag = (_wasGrounded && !grounded) ? "TM LOST GROUND" : "TM diag";
+                Plugin.Log.LogInfo("[" + System.DateTime.Now.ToString("HH:mm:ss.fff") + "] " + tag +
+                                   ": pos=" + hero.transform.position.x.ToString("0.0") + "," +
+                                   hero.transform.position.y.ToString("0.00") +
+                                   " feet=" + feet.y.ToString("0.00") + " active=" + active +
+                                   " floorTop=" + floorTop + " gap=" + gap + " k=" + _k.ToString("0.###") +
+                                   " gnd=" + grounded);
+            }
+            _wasGrounded = grounded;
         }
 
         public static bool TryMapToSilk(Vector2 cu, out Vector2 silk)

@@ -15,6 +15,10 @@ namespace HornetExporter
         /// <summary>Latest button bitfield from the host; consumed by InputInjector.</summary>
         public static int InjectedButtons;
 
+        /// <summary>Capture mode: true = blank-slate (Hornet-only camera), false = main-camera diff.
+        /// Toggled with F2 (S4 visual prototype).</summary>
+        public static bool UseBlankCapture = true;
+
         /// <summary>The active link (for TerrainMirror to read the terrain region).</summary>
         public static LiveLink Instance;
         public PassthroughLink Link => _link;
@@ -25,6 +29,7 @@ namespace HornetExporter
         private Collider2D _heroCol;
         private int _lastClipHash;
         private bool _capLogged;
+        private int _capFail;
         private int _stateTick;
 
         private void Awake()
@@ -89,6 +94,7 @@ namespace HornetExporter
             // S2: refresh the terrain proxy from the host window, then publish Hornet's state mapped
             // back into CU coordinates so the host can puppet its body/camera to her.
             TerrainMirror.Poll(_link);
+            TerrainMirror.Diag(Time.deltaTime);
             if (TerrainMirror.Active && !_link.HostAlive(1500))
             {
                 Plugin.Log.LogWarning("LiveLink: host heartbeat lost; restoring vanilla terrain.");
@@ -122,19 +128,34 @@ namespace HornetExporter
                                    " in=0x" + InjectedButtons.ToString("X"));
             }
 
-            // Publish the isolated frame (cached main-camera diff) every frame.
+            // Publish the isolated frame. Default is the blank-slate capture (Hornet alone on a
+            // transparent background); F2 toggles back to the main-camera diff fallback.
             try
             {
                 byte[] rgba;
                 int w, h;
                 float px, py, wx, wy;
-                if (HornetCapture.CaptureDiffRgba(out rgba, out w, out h, out px, out py, out wx, out wy))
+                bool got = UseBlankCapture
+                    ? HornetCapture.CaptureBlankRgba(out rgba, out w, out h, out px, out py, out wx, out wy)
+                    : HornetCapture.CaptureDiffRgba(out rgba, out w, out h, out px, out py, out wx, out wy);
+                if (got)
                 {
+                    _capFail = 0;
                     _link.WriteFrame(rgba, w, h, px, py, wx, wy, _lastClipHash);
                     if (!_capLogged)
                     {
                         _capLogged = true;
-                        Plugin.Log.LogInfo("LiveLink: publishing isolated frames " + w + "x" + h);
+                        Plugin.Log.LogInfo("LiveLink: publishing isolated frames " + w + "x" + h +
+                                           (UseBlankCapture ? " (blank)" : " (diff)"));
+                    }
+                }
+                else
+                {
+                    _capFail++;
+                    if (_capFail % 90 == 1)
+                    {
+                        Plugin.Log.LogWarning("LiveLink: capture returned no frame (" + _capFail + "x, " +
+                                              (UseBlankCapture ? "blank" : "diff") + ")");
                     }
                 }
             }

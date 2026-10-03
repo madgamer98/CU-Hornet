@@ -529,6 +529,54 @@ Protocol unchanged (still v8): this reuses the existing `EntFlagContactDamage` b
   contact** with knockback; the log shows 1:1 `HURT! dmg=1 hp A->(A-1)/9` ↔ `HEALTH! amount=1`.
   The F7 pogo dummy is *not* a biter, so it still pogoes without hurting her.
 
+## S4 visual — blank-slate capture + the CU camera/terrain fixes (2026-10-03, VERIFIED)
+
+### Blank-slate passthrough (`silksong/src/HornetCapture.cs`, `LiveLink.cs`, `Plugin.cs`)
+- Hornet is captured **alone on a transparent background** using the game's **own main camera** with
+  its `cullingMask` narrowed to `Player(9) | Hero Only(28)` and `clearFlags=SolidColor`, alpha 0.
+  Using the same camera instance is what makes lighting correct (the old offscreen camera came back
+  dark). Do **not** OR in every layer her effect renderers touch — many live on Default(0) and dragged
+  the whole environment in.
+- Her **light/glow/dust children are hidden for the capture** (`HideEffects`), leaving the lit body
+  only; their renderer list is cached (rebuilt when the Hornet instance changes).
+- The camera is temporarily **re-centred on Hornet** for the render so the crop can never be clamped
+  by the screen edge (the earlier "cut off at edges" bug).
+- The published frame is a **fixed 320×320 crop**, so CU allocates its texture/sprite once and never
+  reallocates (this removed the stutter — the old tight-to-alpha crop resized on every needle/pose).
+- Silksong keys: **F1** = blank PNG, **F8** = diff PNG, **F2** = toggle blank/diff live.
+
+### CU display (`src/LiveLink.cs`)
+- Removed the second facing flip. CU's `Body.Flip()` flips the body **root transform scale**, which the
+  `HornetLive` child inherited on top of the facing already in the captured pixels. The display now
+  divides out the parent scale so its world scale is always positive.
+- Frame-size guard self-heals (accepts a new stable size after ~20 rejects) instead of latching.
+- **Ragdoll limbs are pinned to the root** in `PuppetTo` (captured offsets). CU's `PlayerCamera`
+  follows the **average limb position**, so when only the root was moved the limbs (and the camera)
+  sank below while the sprite stayed up — the "CU camera falls through the floor at a step" bug.
+- `Talker.LateUpdate` positions the speech text at `body.limbs[0] + up*4`; patched to anchor to the
+  body root while puppeting so it stops drifting with movement. (Needs `Unity.TextMeshPro` +
+  `UnityEngine.UI` refs in the csproj.)
+
+### Terrain mirror (`src/LiveLink.cs` `PublishTerrain`)
+- Rectangles are now **greedily merged into maximal rectangles** (horizontal runs extended downward
+  while identical), not one box per row. A wall/column becomes one tall collider, killing the
+  internal-edge snags that popped Hornet off multi-block walls.
+- Also mirrors **non-tilemap ground colliders** (placed structures/props/steps) clipped to the window —
+  these are **not in `worldBlocks`**, so a block-only sampler left holes and she fell through.
+- Emitted rects get a small `TerrainMargin`.
+
+### Diagnostics (trim before shipping)
+- CU: `LiveLink terrain: anchor/rects/minY/blockTop/geom/psSeq/pup`, `LiveLink camY/limbAvgY/limb0Y/rootY`,
+  `LiveLink displays/avatars/visibleBodySprites`, wall-clock prefixed.
+- Silksong: `TM diag` / `TM LOST GROUND` (with `floorTop/gap/k`), `TerrainMirror: re-disabled N ...`.
+
+### Still open / known
+- **Scale unification** (S4 §scaling) not done: CU still draws with manual `Scale=1.6`, `Ppu=64`; the
+  capture PPU is still the main camera's, not a fixed one derived from Hornet's height.
+- Vanilla terrain streaming is swept every 0.5 s (`SweepVanilla`), but the fall wasn't caused by it.
+- The `k` used for the mapping is captured on F4 apply from the CU collider height; **do not apply F4
+  while CU's player is crouched** (it was seen applying with `cuH=2.5` → `k=0.832`, world half-scale).
+
 ---
 
 ## RESUME HERE — next session (written 2026-10-03)
@@ -539,7 +587,8 @@ left running. **S4 phase 3 is verified** (contact damage = 1 mask/contact; real 
 **Working end-to-end today (all human-verified unless noted):**
 input round-trip (S0) → terrain mirror on CU's real block grid (S1 + real-run fix) → CU puppet (S2) →
 seams/watchdogs/moveset (S3) → **pogo off CU entities** (S4 P1) → **Hornet damages CU actors** (S4 P2) →
-**actor → Hornet contact damage + real nail damage** (S4 P3) → **ground jump / double jump fixed** (S4).
+**actor → Hornet contact damage + real nail damage** (S4 P3) → **ground jump / double jump fixed** (S4) →
+**blank-slate visual passthrough + stutter/flip/terrain-step/camera-text fixes** (S4 visual).
 Real-run fall-through is fixed.
 
 **Exact run recipe:**
@@ -548,18 +597,17 @@ Real-run fall-through is fixed.
 3. Silksong: START GAME → profile 1. In gameplay press **F4** to apply the mirror.
 4. Play in CU. **F7** in CU spawns a pogo dummy below the player. CU's console (backquote) `spawn
    <id>` (e.g. `shadecrawler`) spawns real actors; slash/pogo/take contact from them.
-5. **F3** in Silksong restores vanilla terrain. Watchdogs auto-release both ways.
+5. **F3** in Silksong restores vanilla terrain. **F2** toggles blank/diff capture; **F1**/**F8** dump
+   blank/diff PNGs. Watchdogs auto-release both ways.
 - Automated `um win drive`: plain VKs work; `scanmode` only for the CU content-warning Ctrl. Synthetic
   jump timing is unreliable — prefer the human for jump verification.
 
 **Immediate next steps (in priority order):**
-1. **Blank-slate visual passthrough + scale** (human-deferred). `S4-SCOPE.md` §visual: dedicated capture
-   camera culling *only* Hornet's layers (Player/Attack/Particle/Hero Only) with alpha-0 clear; lighting
-   is the known unknown (earlier offscreen camera rendered dark). Scale: fix the capture PPU from Hornet's
-   height and derive CU's display scale from `k` (drop the manual `Scale`/`Ppu`).
+1. **Scale unification** (S4 §scaling): fix the capture PPU from Hornet's height and derive CU's display
+   scale from `k`; drop the manual `AvatarScale`/`Ppu` (currently `Scale=1.6`, `Ppu=64`).
 2. Optional polish: pogo/hit FX feedback (`Bounce(id)` event), wall-cling test (needs CU walls), increase
-   entity stream radius/size if needed. **Trim diagnostics** (`HURT!`/`HEALTH!`/`SRC!` probes and the
-   30-frame state line) when done testing.
+   entity stream radius/size. **Trim the verbose diagnostics** added for the visual/step hunt
+   (`LiveLink terrain`, `camY/limbAvgY`, `TM diag`, wall-clock prefixes) before showing off or publishing.
 
 **Gotchas a new session must know:**
 - The shared protocol is at **`Version = 8`** (`shared/PassthroughProtocol.cs`); both plugins compile it,

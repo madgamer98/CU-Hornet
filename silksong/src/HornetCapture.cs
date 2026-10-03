@@ -112,6 +112,204 @@ namespace HornetExporter
         private static Color32[] _bufA;
         private static Color32[] _bufB;
 
+        // ---- Blank-slate capture (S4 visual): main camera, narrowed culling mask, alpha-0 clear ----
+        private const int BlankCrop = 320; // fixed frame size so CU never reallocates its texture
+        private static RenderTexture _blankRt;
+        private static Texture2D _blankTex;
+        private static int _blankW, _blankH;
+        private static Color32[] _blankBuf;
+        private static byte[] _blankRgba;
+        private static int _heroMask;
+        private static bool _heroMaskSet;
+        private static HeroController _cacheHero;
+        private static readonly List<Renderer> _bodyCache = new List<Renderer>();
+        private static readonly List<Renderer> _effectCache = new List<Renderer>();
+
+        /// <summary>
+        /// Blank-slate capture: render Hornet alone on a transparent background using the game's own
+        /// main camera with its culling mask narrowed to the layers her renderers actually occupy.
+        /// Because it is the same camera instance, the lit/global state is already correct (the old
+        /// dedicated offscreen camera came back dark). No environment, so no diff artifacts or
+        /// background bleeding into semi-transparent pixels.
+        /// </summary>
+        public static bool CaptureBlankRgba(out byte[] rgba, out int width, out int height,
+            out float pivotX, out float pivotY, out float worldX, out float worldY)
+        {
+            rgba = null;
+            width = height = 0;
+            pivotX = pivotY = worldX = worldY = 0f;
+
+            HeroController hero = HeroController.instance;
+            Camera cam = MainCamera();
+            if (hero == null || cam == null)
+            {
+                return false;
+            }
+            EnsureHeroMask(hero);
+            if (_heroMask == 0)
+            {
+                return false;
+            }
+
+            int sw = Screen.width, sh = Screen.height;
+            if (_blankRt == null || _blankRt.width != sw || _blankRt.height != sh)
+            {
+                if (_blankRt != null)
+                {
+                    _blankRt.Release();
+                }
+                _blankRt = new RenderTexture(sw, sh, 24, RenderTextureFormat.ARGB32);
+                _blankRt.Create();
+            }
+
+            // Center the camera on Hornet for this render. The crop comes from a screen-sized RT and
+            // is clamped to the screen, so when she was near the edge of Silksong's view the crop
+            // cut her off. Temporarily recentring (restored in finally) avoids that.
+            Vector3 prevCamPos = cam.transform.position;
+            cam.transform.position = new Vector3(hero.transform.position.x, hero.transform.position.y,
+                                                 prevCamPos.z);
+
+            // Fixed-size crop centred on her: the published frame is always the same dimensions, so
+            // CU can keep one texture/sprite and never reallocate (the old tight-to-alpha crop changed
+            // size with every needle/pose and made CU hitch).
+            int cw = Mathf.Min(BlankCrop, sw);
+            int ch = Mathf.Min(BlankCrop, sh);
+            ScreenRect rect = new ScreenRect
+            {
+                x = (sw - cw) / 2,
+                y = (sh - ch) / 2,
+                w = cw,
+                h = ch,
+            };
+            if (_blankTex == null || _blankW != cw || _blankH != ch)
+            {
+                _blankTex = new Texture2D(cw, ch, TextureFormat.RGBA32, false);
+                _blankW = cw;
+                _blankH = ch;
+                _blankBuf = new Color32[cw * ch];
+                _blankRgba = new byte[cw * ch * 4];
+            }
+
+            int prevMask = cam.cullingMask;
+            CameraClearFlags prevClear = cam.clearFlags;
+            Color prevBg = cam.backgroundColor;
+            bool prevOrtho = cam.orthographic;
+            float spx, spy;
+            try
+            {
+                cam.cullingMask = _heroMask;
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+                cam.targetTexture = _blankRt;
+                HideEffects(hero);
+                cam.Render();
+                Vector3 sp = cam.WorldToScreenPoint(hero.transform.position);
+                spx = sp.x;
+                spy = sp.y;
+                RenderTexture.active = _blankRt;
+                _blankTex.ReadPixels(new Rect(rect.x, rect.y, rect.w, rect.h), 0, 0);
+                _blankTex.Apply();
+            }
+            finally
+            {
+                RestoreEffects();
+                RenderTexture.active = null;
+                cam.targetTexture = null;
+                cam.cullingMask = prevMask;
+                cam.clearFlags = prevClear;
+                cam.backgroundColor = prevBg;
+                cam.orthographic = prevOrtho;
+                cam.transform.position = prevCamPos;
+            }
+
+            _blankTex.GetRawTextureData<Color32>().CopyTo(_blankBuf);
+
+            bool any = false;
+            for (int i = 0; i < _blankBuf.Length; i++)
+            {
+                if (_blankBuf[i].a > 8)
+                {
+                    any = true;
+                    break;
+                }
+            }
+            if (!any)
+            {
+                return false;
+            }
+
+            int o = 0;
+            for (int i = 0; i < _blankBuf.Length; i++)
+            {
+                Color32 c = _blankBuf[i];
+                _blankRgba[o++] = c.r;
+                _blankRgba[o++] = c.g;
+                _blankRgba[o++] = c.b;
+                _blankRgba[o++] = c.a;
+            }
+            rgba = _blankRgba;
+            width = cw;
+            height = ch;
+            // The camera is centred on her, so her origin lands inside the fixed crop.
+            pivotX = (spx - rect.x) / cw;
+            pivotY = (spy - rect.y) / ch;
+            Vector3 p = hero.transform.position;
+            worldX = p.x;
+            worldY = p.y;
+            return true;
+        }
+
+        private static void EnsureHeroMask(HeroController hero)
+        {
+            if (_heroMaskSet && _cacheHero == hero)
+            {
+                return;
+            }
+            bool firstTime = !_heroMaskSet;
+            _heroMaskSet = true;
+            _cacheHero = hero;
+            // Hornet's body/hero light/dust live on Player(9); Hero Only(28) is a hero-exclusive
+            // layer if the game uses it. Do NOT OR in every layer her effect renderers touch: many
+            // effects sit on Default(0)/Terrain(8)/Enemies(11) etc., which would drag the whole
+            // environment into the "blank" render.
+            _heroMask = 1 << 9;
+            if (!string.IsNullOrEmpty(LayerMask.LayerToName(28)))
+            {
+                _heroMask |= 1 << 28;
+            }
+
+            // Cache the body vs effect renderers so HideEffects does not walk/allocate the whole
+            // hierarchy every frame. Rebuilt when the hero instance changes (room transitions).
+            _bodyCache.Clear();
+            _effectCache.Clear();
+            var names = new System.Text.StringBuilder("HornetCapture blank: hero renderer layers: ");
+            foreach (Renderer r in hero.GetComponentsInChildren<Renderer>(true))
+            {
+                bool isBody = r.transform == hero.transform &&
+                              (r is SpriteRenderer || r.GetType().Name == "MeshRenderer");
+                if (isBody)
+                {
+                    _bodyCache.Add(r);
+                }
+                else
+                {
+                    _effectCache.Add(r);
+                }
+                if (firstTime)
+                {
+                    int l = r.gameObject.layer;
+                    names.Append(r.gameObject.name).Append("(L").Append(l).Append('/')
+                         .Append(LayerMask.LayerToName(l)).Append(") ");
+                }
+            }
+            if (firstTime)
+            {
+                Plugin.Log.LogInfo(names.ToString());
+                Plugin.Log.LogInfo("HornetCapture blank: culling mask=0x" + _heroMask.ToString("X") +
+                                   " body=" + _bodyCache.Count + " effects=" + _effectCache.Count);
+            }
+        }
+
         /// <summary>
         /// Cached main-camera diff capture: Hornet-visible vs Hornet-hidden, using the game's own
         /// camera (so lighting is correct and the background cancels to transparent). Reuses all
@@ -297,6 +495,27 @@ namespace HornetExporter
             Plugin.Log.LogInfo("F8: wrote hornet_capture.png " + tex.width + "x" + tex.height);
         }
 
+        /// <summary>F1: write the blank-slate (Hornet-only) capture to a PNG for comparison.</summary>
+        public static void CaptureBlankToFile()
+        {
+            byte[] rgba;
+            int w, h;
+            float px, py, wx, wy;
+            if (!CaptureBlankRgba(out rgba, out w, out h, out px, out py, out wx, out wy))
+            {
+                Plugin.Log.LogInfo("F1: blank capture found no Hornet pixels.");
+                return;
+            }
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            tex.LoadRawTextureData(rgba);
+            tex.Apply();
+            string dir = Path.Combine(BepInEx.Paths.PluginPath, "HornetExporter");
+            Directory.CreateDirectory(dir);
+            File.WriteAllBytes(Path.Combine(dir, "hornet_blank.png"), tex.EncodeToPNG());
+            Plugin.Log.LogInfo("F1: wrote hornet_blank.png " + w + "x" + h);
+            Object.Destroy(tex);
+        }
+
         /// <summary>Bakes exact frames for each named clip.</summary>
         public static void Bake(string[] clipNames)
         {
@@ -424,6 +643,41 @@ namespace HornetExporter
             {
                 r.enabled = enabled;
             }
+        }
+
+        /// <summary>
+        /// For the blank capture: hide every renderer under Hornet except her body (the renderers
+        /// the main-camera diff toggles). Her hero-light/glow/dust effects sit on the same Player
+        /// layer and would otherwise dominate the crop; disabling them does not darken the body
+        /// (its colour comes from the global lighting, not the additive light sprite). Only
+        /// renderers that were enabled are touched, and they are restored afterwards.
+        /// </summary>
+        private static readonly List<Renderer> _blankHidden = new List<Renderer>();
+
+        private static void HideEffects(HeroController hero)
+        {
+            _blankHidden.Clear();
+            for (int i = 0; i < _effectCache.Count; i++)
+            {
+                Renderer r = _effectCache[i];
+                if (r != null && r.enabled)
+                {
+                    _blankHidden.Add(r);
+                    r.enabled = false;
+                }
+            }
+        }
+
+        private static void RestoreEffects()
+        {
+            for (int i = 0; i < _blankHidden.Count; i++)
+            {
+                if (_blankHidden[i] != null)
+                {
+                    _blankHidden[i].enabled = true;
+                }
+            }
+            _blankHidden.Clear();
         }
 
         private static Texture2D DiffCrop(Color32[] px, Color32[] bg, ScreenRect rect, HeroController hero,

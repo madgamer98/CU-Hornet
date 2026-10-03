@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HarmonyLib;
 using HornetPassthrough;
 using UnityEngine;
 
@@ -20,6 +21,9 @@ namespace HornetInCasualties
         private int _lastFrameId;
         private readonly List<Rigidbody2D> _frozen = new List<Rigidbody2D>();
         private readonly List<RigidbodyType2D> _frozenTypes = new List<RigidbodyType2D>();
+        private readonly List<Transform> _limbT = new List<Transform>();
+        private readonly List<Rigidbody2D> _limbRb = new List<Rigidbody2D>();
+        private readonly List<Vector3> _limbOff = new List<Vector3>();
 
         private byte[] _buf;
         private byte[] _frameBytes;
@@ -33,6 +37,10 @@ namespace HornetInCasualties
         private float _terrainTimer;
         private int _terrainRev;
         private readonly float[] _rectBuf = new float[Proto.MaxRects * 4];
+        private readonly List<int[]> _openRects = new List<int[]>();
+        private readonly List<int[]> _curRuns = new List<int[]>();
+        private readonly Collider2D[] _groundHits = new Collider2D[128];
+        private const float TerrainMargin = 0.05f;
         private static readonly int GroundMask = LayerMask.GetMask("Ground");
 
         private readonly float[] _entBuf = new float[Proto.MaxEntities * Proto.EntityStrideFloats];
@@ -46,9 +54,15 @@ namespace HornetInCasualties
         private Sprite _dummySprite;
         private int _entRev;
         private int _eventReadIndex;
+        private float _pupX, _pupY;
+        private bool _pupValid;
 
         public void Init(Body body)
         {
+            if (_display != null)
+            {
+                return; // already initialised (guards against a double display)
+            }
             _body = body;
             _buf = new byte[Proto.PixelsSize];
 
@@ -84,6 +98,10 @@ namespace HornetInCasualties
                                    " seq=" + _link.DebugSeq + " hasPx=" + _link.DebugHasPixels +
                                    " silkAlive=" + _link.SilkAlive());
             }
+            if (_diag % 300 == 0)
+            {
+                LogDisplayDiag();
+            }
 
             _link.Heartbeat();
             float vx = _body.rb != null ? _body.rb.velocity.x : 0f;
@@ -117,6 +135,9 @@ namespace HornetInCasualties
                         EnablePuppet();
                     }
                     PuppetTo(hx, hy, hfacing);
+                    _pupX = hx;
+                    _pupY = hy;
+                    _pupValid = true;
                 }
                 else if (Puppeting)
                 {
@@ -162,8 +183,14 @@ namespace HornetInCasualties
                     cur.y + Plugin.AvatarOffsetY.Value * scale,
                     cur.z - 0.02f);
                 _displayT.rotation = Quaternion.identity;
-                _displayT.localScale = new Vector3(scale, scale, 1f);
-                _display.flipX = !_body.isRight;
+                // CU's Body flips its own root transform scale (Body.Flip) when it changes facing.
+                // This child inherits that, which mirrors the sprite a second time on top of the
+                // facing already baked into the captured pixels. Divide out the parent's scale (sign
+                // included) so the display's world scale is always +scale and never mirrored.
+                Vector3 ls = _body.transform.lossyScale;
+                float sx = Mathf.Abs(ls.x) > 1e-4f ? scale / ls.x : scale;
+                float sy = Mathf.Abs(ls.y) > 1e-4f ? scale / ls.y : scale;
+                _displayT.localScale = new Vector3(sx, sy, 1f);
             }
         }
 
@@ -223,7 +250,34 @@ namespace HornetInCasualties
                 _frozenTypes.Add(rb.bodyType);
                 rb.bodyType = RigidbodyType2D.Kinematic;
             }
-            Plugin.Log.LogInfo("LiveLink: S2 puppet enabled (" + _frozen.Count + " rigidbodies frozen).");
+            // The camera follows the average ragdoll limb position (PlayerCamera), so the limbs must
+            // travel with the puppeted root or the camera sinks below while the sprite stays up.
+            _limbT.Clear();
+            _limbRb.Clear();
+            _limbOff.Clear();
+            if (_body.limbs != null)
+            {
+                for (int i = 0; i < _body.limbs.Length; i++)
+                {
+                    Limb l = _body.limbs[i];
+                    if (l == null)
+                    {
+                        continue;
+                    }
+                    Rigidbody2D lrb = l.GetComponent<Rigidbody2D>();
+                    if (lrb != null && !_frozen.Contains(lrb))
+                    {
+                        _frozen.Add(lrb);
+                        _frozenTypes.Add(lrb.bodyType);
+                        lrb.bodyType = RigidbodyType2D.Kinematic;
+                    }
+                    _limbT.Add(l.transform);
+                    _limbRb.Add(lrb);
+                    _limbOff.Add(l.transform.position - _body.transform.position);
+                }
+            }
+            Plugin.Log.LogInfo("LiveLink: S2 puppet enabled (" + _frozen.Count + " rigidbodies frozen, " +
+                               _limbT.Count + " limbs pinned).");
         }
 
         private void PuppetTo(float x, float y, int facing)
@@ -240,6 +294,20 @@ namespace HornetInCasualties
             if (_body.rb != null)
             {
                 _body.rb.position = np;
+            }
+            // Pin each ragdoll limb to the root at its captured offset.
+            for (int i = 0; i < _limbT.Count; i++)
+            {
+                if (_limbT[i] == null)
+                {
+                    continue;
+                }
+                Vector3 lp = np + _limbOff[i];
+                _limbT[i].position = lp;
+                if (_limbRb[i] != null)
+                {
+                    _limbRb[i].position = lp;
+                }
             }
             if (facing != 0)
             {
@@ -295,9 +363,15 @@ namespace HornetInCasualties
             Vector2Int bmin = w.WorldToBlockPos(new Vector2(anchor.x - half, anchor.y - half));
             Vector2Int bmax = w.WorldToBlockPos(new Vector2(anchor.x + half, anchor.y + half));
 
+            // Greedy-merge the solid grid into maximal rectangles (horizontal runs, then extend
+            // identical runs downward). A stair/wall used to be a stack of 1-unit-tall boxes; the
+            // seams between them snagged Hornet's collider (internal edges), popping her up and off.
+            // Merging turns a column/wall into one tall box with a clean surface.
             int count = 0;
+            _openRects.Clear();
             for (int by = bmin.y; by <= bmax.y && count < Proto.MaxRects; by++)
             {
+                _curRuns.Clear();
                 int runStart = -1;
                 for (int bx = bmin.x; bx <= bmax.x + 1; bx++)
                 {
@@ -316,23 +390,132 @@ namespace HornetInCasualties
                     }
                     else if (runStart >= 0)
                     {
-                        Vector2 p0 = w.BlockToWorldPos(new Vector2Int(runStart, by));
-                        _rectBuf[count * 4 + 0] = p0.x - 0.5f;
-                        _rectBuf[count * 4 + 1] = p0.y - 0.5f;
-                        _rectBuf[count * 4 + 2] = bx - runStart;
-                        _rectBuf[count * 4 + 3] = 1f;
-                        count++;
+                        _curRuns.Add(new int[] { runStart, bx });
                         runStart = -1;
-                        if (count >= Proto.MaxRects)
+                    }
+                }
+
+                int preCount = _openRects.Count;
+                var matched = new bool[preCount];
+                for (int i = 0; i < _curRuns.Count; i++)
+                {
+                    int rs = _curRuns[i][0], re = _curRuns[i][1];
+                    bool found = false;
+                    for (int j = 0; j < preCount; j++)
+                    {
+                        if (!matched[j] && _openRects[j][0] == rs && _openRects[j][1] == re)
                         {
+                            matched[j] = true;
+                            found = true;
                             break;
                         }
                     }
+                    if (!found && count < Proto.MaxRects)
+                    {
+                        _openRects.Add(new int[] { rs, re, by }); // {startBx, endBxExclusive, y0}
+                    }
+                }
+                for (int j = preCount - 1; j >= 0; j--)
+                {
+                    if (!matched[j])
+                    {
+                        int[] r = _openRects[j];
+                        EmitRect(w, r[0], r[1], r[2], by - r[2], ref count);
+                        _openRects.RemoveAt(j);
+                    }
+                }
+            }
+            for (int j = _openRects.Count - 1; j >= 0 && count < Proto.MaxRects; j--)
+            {
+                int[] r = _openRects[j];
+                EmitRect(w, r[0], r[1], r[2], bmax.y + 1 - r[2], ref count);
+            }
+            _openRects.Clear();
+
+            // Non-block ground colliders (placed structures/props/steps) are not in worldBlocks, so
+            // the block pass above misses them. Include their (window-clipped) bounds too. Skip the
+            // terrain tilemap/composite colliders, whose chunk bounds are huge AABBs and already
+            // covered exactly by the block pass.
+            int gh = Physics2D.OverlapBoxNonAlloc(anchor, new Vector2(half * 2f, half * 2f), 0f,
+                _groundHits, GroundMask);
+            int geomHits = 0;
+            for (int i = 0; i < gh && count < Proto.MaxRects; i++)
+            {
+                Collider2D c = _groundHits[i];
+                if (c == null)
+                {
+                    continue;
+                }
+                string tn = c.GetType().Name;
+                if (tn == "TilemapCollider2D" || tn == "CompositeCollider2D")
+                {
+                    continue; // chunk tilemap colliders: covered exactly by the block pass
+                }
+                Bounds b = c.bounds;
+                float x0 = Mathf.Max(b.min.x, anchor.x - half);
+                float x1 = Mathf.Min(b.max.x, anchor.x + half);
+                float y0 = Mathf.Max(b.min.y, anchor.y - half);
+                float y1 = Mathf.Min(b.max.y, anchor.y + half);
+                if (x1 > x0 && y1 > y0)
+                {
+                    EmitRectAbs(x0, y0, x1 - x0, y1 - y0, ref count);
+                    geomHits++;
                 }
             }
 
             _terrainRev++;
             _link.WriteTerrain(cb.size.y, anchor.x, anchor.y, _rectBuf, count, _terrainRev);
+            // Topmost solid CU block directly under the player's column (compare with the anchor):
+            // if this is far below the collider, CU's own terrain has a drop there.
+            Vector2Int pb = w.WorldToBlockPos(new Vector2(center.x, cb.min.y - 0.5f));
+            int pbx = pb.x;
+            int pby = pb.y;
+            float blockTop = -9999f;
+            for (int by = pby; by >= bmin.y; by--)
+            {
+                BlockInfo bi = w.GetBlockInfo(w.GetBlock(new Vector2Int(pbx, by)));
+                if (bi != null && bi.health > 0f)
+                {
+                    blockTop = w.BlockToWorldPos(new Vector2Int(pbx, by)).y + 0.5f;
+                    break;
+                }
+            }
+            Plugin.Log.LogInfo("[" + System.DateTime.Now.ToString("HH:mm:ss.fff") + "] LiveLink terrain: anchor=(" +
+                               anchor.x.ToString("0.0") + "," +
+                               anchor.y.ToString("0.0") + ") rects=" + count +
+                               " playerMinY=" + cb.min.y.ToString("0.0") +
+                               " blockTop=" + blockTop.ToString("0.0") +
+                               " geom=" + geomHits +
+                               " psSeq=" + _link.DebugPlayerSeq +
+                               (Puppeting && _pupValid
+                                   ? " pup=(" + _pupX.ToString("0.0") + "," + _pupY.ToString("0.0") + ")"
+                                   : " pup=off") +
+                               " rev=" + _terrainRev);
+        }
+
+        /// <summary>Emit one merged solid rectangle (block range -> CU-space AABB, small margin).</summary>
+        private void EmitRect(WorldGeneration w, int startBx, int endBx, int y0, int height, ref int count)
+        {
+            if (height <= 0 || count >= Proto.MaxRects || endBx <= startBx)
+            {
+                return;
+            }
+            Vector2 p0 = w.BlockToWorldPos(new Vector2Int(startBx, y0));
+            EmitRectAbs(p0.x - 0.5f, p0.y - 0.5f, endBx - startBx, height, ref count);
+        }
+
+        /// <summary>Emit a rect from absolute CU coords (expanded by the terrain margin).</summary>
+        private void EmitRectAbs(float x, float y, float w, float h, ref int count)
+        {
+            if (w <= 0f || h <= 0f || count >= Proto.MaxRects)
+            {
+                return;
+            }
+            _rectBuf[count * 4 + 0] = x - TerrainMargin;
+            _rectBuf[count * 4 + 1] = y - TerrainMargin;
+            _rectBuf[count * 4 + 2] = w + TerrainMargin * 2f;
+            _rectBuf[count * 4 + 3] = h + TerrainMargin * 2f;
+            count++;
         }
 
         /// <summary>Spawn a visible dummy near the player to pogo off (F7 in the sandbox).</summary>
@@ -565,6 +748,60 @@ namespace HornetInCasualties
             }
         }
 
+        /// <summary>Diagnostic for the "double sprite": count displays/avatars and any visible body sprites.</summary>
+        private void LogDisplayDiag()
+        {
+            int displays = 0;
+            SpriteRenderer[] all = UnityEngine.Object.FindObjectsByType<SpriteRenderer>(FindObjectsSortMode.None);
+            foreach (SpriteRenderer sr in all)
+            {
+                if (sr != null && sr.gameObject.name == "HornetLive")
+                {
+                    displays++;
+                }
+            }
+            int avatars = UnityEngine.Object.FindObjectsByType<HornetAvatar>(FindObjectsSortMode.None).Length;
+            int links = UnityEngine.Object.FindObjectsByType<LiveLink>(FindObjectsSortMode.None).Length;
+            int visibleBody = 0;
+            if (_body != null)
+            {
+                foreach (SpriteRenderer sr in _body.GetComponentsInChildren<SpriteRenderer>(true))
+                {
+                    if (sr != null && sr.enabled && sr != _display && !sr.transform.IsChildOf(_displayT))
+                    {
+                        visibleBody++;
+                    }
+                }
+            }
+            Plugin.Log.LogInfo("LiveLink displays=" + displays + " avatars=" + avatars + " links=" + links +
+                               " visibleBodySprites=" + visibleBody);
+            float limbY = 0f;
+            int n = 0;
+            if (_body.limbs != null)
+            {
+                for (int i = 0; i < _body.limbs.Length; i++)
+                {
+                    if (_body.limbs[i] != null)
+                    {
+                        limbY += _body.limbs[i].transform.position.y;
+                        n++;
+                    }
+                }
+            }
+            if (n > 0)
+            {
+                limbY /= n;
+            }
+            float camY = PlayerCamera.main != null ? PlayerCamera.main.transform.position.y : 0f;
+            float l0 = (_body.limbs != null && _body.limbs.Length > 0 && _body.limbs[0] != null)
+                ? _body.limbs[0].transform.position.y : 0f;
+            Plugin.Log.LogInfo("LiveLink camY=" + camY.ToString("0.0") + " limbAvgY=" + limbY.ToString("0.0") +
+                               " limb0Y=" + l0.ToString("0.0") +
+                               " rootY=" + _body.transform.position.y.ToString("0.0") + " puppeting=" + Puppeting);
+        }
+
+        private int _rejectStreak;
+
         private void ApplyFrame(int w, int h, float px, float py)
         {
             if (w > 320 || h > 320)
@@ -572,11 +809,24 @@ namespace HornetInCasualties
                 return; // guard against a bad capture
             }
             // Ignore sudden size jumps (the diff occasionally catches a large effect), which would
-            // otherwise render Hornet huge for a frame.
+            // otherwise render Hornet huge for a frame. But never latch: after a room transition or
+            // capture-mode change the size can settle somewhere new, so accept after a short streak.
             if (_tex != null && (w > _lastW * 1.6f || h > _lastH * 1.6f || w < _lastW * 0.6f || h < _lastH * 0.6f))
             {
-                return;
+                _rejectStreak++;
+                if (_rejectStreak < 20)
+                {
+                    if (_rejectStreak == 1 || _rejectStreak % 30 == 0)
+                    {
+                        Plugin.Log.LogInfo("LiveLink: frame size " + w + "x" + h + " jumped from " +
+                                           _lastW + "x" + _lastH + "; holding (" + _rejectStreak + ")");
+                    }
+                    return;
+                }
+                Plugin.Log.LogWarning("LiveLink: accepting new frame size " + w + "x" + h +
+                                      " after " + _rejectStreak + " rejects.");
             }
+            _rejectStreak = 0;
             if (_tex == null || _lastW != w || _lastH != h)
             {
                 _lastW = w;
@@ -599,6 +849,25 @@ namespace HornetInCasualties
         private void OnDestroy()
         {
             _link?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// While puppeting, CU's speech text follows the head limb (Talker.LateUpdate), which leans with
+    /// movement, so the text drifts off Hornet's sprite. Anchor it to the body root instead.
+    /// </summary>
+    [HarmonyPatch(typeof(Talker), "LateUpdate")]
+    internal static class TalkerLateUpdatePatch
+    {
+        private static void Postfix(Talker __instance)
+        {
+            if (!LiveLink.Puppeting || __instance == null || __instance.body == null ||
+                __instance.text == null || __instance.text.rectTransform == null)
+            {
+                return;
+            }
+            Vector3 p = __instance.body.transform.position;
+            __instance.text.rectTransform.position = new Vector3(p.x, p.y + 3.2f, -2.6f);
         }
     }
 }

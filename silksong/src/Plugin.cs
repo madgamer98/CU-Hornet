@@ -75,6 +75,17 @@ namespace HornetExporter
                 HornetCapture.CaptureToFile();
             }
 
+            if (Input.GetKeyDown(KeyCode.F2))
+            {
+                LiveLink.UseBlankCapture = !LiveLink.UseBlankCapture;
+                Plugin.Log.LogInfo("Capture mode: " + (LiveLink.UseBlankCapture ? "blank" : "diff"));
+            }
+
+            if (Input.GetKeyDown(KeyCode.F1))
+            {
+                HornetCapture.CaptureBlankToFile();
+            }
+
             if (Input.GetKeyDown(KeyCode.F6))
             {
                 DumpClips();
