@@ -8,10 +8,10 @@ using UnityEngine;
 namespace HornetExporter
 {
     /// <summary>
-    /// Silksong-side helper. Finds the live Hornet (HeroController) and, on F7, logs her
-    /// sprite hierarchy and current animation, and writes one isolated frame to a PNG.
-    /// This is the seed of the passthrough source: the same plugin will serve Hornet frames
-    /// to Casualties: Unknown over a shared-memory link.
+    /// Silksong side of the passthrough. Streams Hornet's captured frame, HUD, vitals and input to
+    /// Casualties: Unknown over shared memory (<see cref="LiveLink"/>) and mirrors CU's terrain/actors
+    /// (<see cref="TerrainMirror"/>, <see cref="EntityProxies"/>).
+    /// Hotkeys: F4 apply mirror, F3 restore, F2 toggle blank/diff capture, F7 dump Hornet info.
     /// </summary>
     [BepInPlugin(Guid, "Hornet Exporter", Version)]
     public class Plugin : BaseUnityPlugin
@@ -40,7 +40,7 @@ namespace HornetExporter
             link.hideFlags = HideFlags.HideAndDontSave;
             link.AddComponent<LiveLink>();
 
-            Log.LogInfo("Hornet Exporter v" + Version + " loaded. Press F7 in gameplay to inspect Hornet.");
+            Log.LogInfo("Hornet Exporter v" + Version + " loaded.");
 
             var layers = new StringBuilder("Layers: ");
             for (int i = 0; i < 32; i++)
@@ -60,7 +60,7 @@ namespace HornetExporter
         }
     }
 
-    /// <summary>F7 = dump Hornet info; F8 = write an isolated Hornet PNG.</summary>
+    /// <summary>F4 = apply the mirror; F3 = restore; F2 = toggle capture mode; F7 = dump Hornet info.</summary>
     internal class Hotkeys : MonoBehaviour
     {
         private void Update()
@@ -70,30 +70,10 @@ namespace HornetExporter
                 DumpHornet();
             }
 
-            if (Input.GetKeyDown(KeyCode.F8))
-            {
-                HornetCapture.CaptureToFile();
-            }
-
             if (Input.GetKeyDown(KeyCode.F2))
             {
                 LiveLink.UseBlankCapture = !LiveLink.UseBlankCapture;
                 Plugin.Log.LogInfo("Capture mode: " + (LiveLink.UseBlankCapture ? "blank" : "diff"));
-            }
-
-            if (Input.GetKeyDown(KeyCode.F1))
-            {
-                HornetCapture.CaptureBlankToFile();
-            }
-
-            if (Input.GetKeyDown(KeyCode.F6))
-            {
-                DumpClips();
-            }
-
-            if (Input.GetKeyDown(KeyCode.F5))
-            {
-                HornetCapture.Bake(DefaultClips);
             }
 
             if (Input.GetKeyDown(KeyCode.F4))
@@ -105,93 +85,6 @@ namespace HornetExporter
             {
                 TerrainMirror.Restore();
             }
-        }
-
-        private static readonly string[] DefaultClips =
-        {
-            // locomotion
-            "Idle", "Idle To Run", "Idle To Run Short", "Run", "Run To Idle", "Turn", "Turn Quick", "Walk",
-            "Airborne", "Fall", "Land", "HardLand", "HardLand Quick", "Land to Run",
-            "Sprint", "Sprint Air", "Sprint Turn", "Super Jump Loop",
-            // dash
-            "Dash", "Dash Down", "Air Dash", "Dash Attack", "Dash Attack Antic", "Dash Attack Recover",
-            "Dash To Idle",
-            // melee / needle
-            "Slash", "SlashAlt", "Slash_Charged", "SlashEffect", "SlashEffectAlt", "UpSlash", "UpSlashEffect",
-            "DownSpike", "DownSpike Antic", "Downspike Recovery", "DownSlashEffect", "Wall Slash", "Recoil",
-            // wall / mantle
-            "Wall Slide", "Wall Cling", "Walljump", "Wall Scramble", "Wall Scramble Antic", "Mantle Cling",
-            "Double Jump", "Double Jump Effect",
-            // needle throw / harpoon
-            "NeedleThrow AnticA", "NeedleThrow AnticG", "NeedleThrow Throwing", "NeedleThrow Out",
-            "NeedleThrow Return", "NeedleThrow Catch", "NeedleThrow Thunk",
-            "Harpoon Antic", "Harpoon Throw", "Harpoon Catch", "Harpoon Needle", "Harpoon Needle Return",
-            // bind / utility
-            "BindCharge Ground", "BindBurst Ground", "BindCancel Ground", "Bind Silk",
-            "Hurt To Idle", "Idle Hurt", "Death",
-        };
-
-        private void DumpClips()
-        {
-            HeroController hero = HeroController.instance;
-            if (hero == null)
-            {
-                Plugin.Log.LogInfo("F6: no HeroController.");
-                return;
-            }
-            var animator = hero.GetComponentInChildren<tk2dSpriteAnimator>();
-            if (animator == null || animator.Library == null)
-            {
-                Plugin.Log.LogInfo("F6: no tk2d library.");
-                return;
-            }
-
-            var sb = new StringBuilder();
-            sb.Append("{\"clips\":[");
-            tk2dSpriteAnimationClip[] clips = animator.Library.clips;
-            for (int i = 0; i < clips.Length; i++)
-            {
-                if (i > 0)
-                {
-                    sb.Append(',');
-                }
-                tk2dSpriteAnimationClip c = clips[i];
-                sb.Append("{\"name\":\"").Append(Escape(c.name)).Append("\",\"fps\":").Append(c.fps)
-                  .Append(",\"frames\":[");
-                if (c.frames != null)
-                {
-                    for (int f = 0; f < c.frames.Length; f++)
-                    {
-                        if (f > 0)
-                        {
-                            sb.Append(',');
-                        }
-                        tk2dSpriteAnimationFrame fr = c.frames[f];
-                        string coll = fr.spriteCollection != null ? fr.spriteCollection.spriteCollectionName : null;
-                        string spr = "?";
-                        if (fr.spriteCollection != null && fr.spriteCollection.spriteDefinitions != null &&
-                            fr.spriteId >= 0 && fr.spriteId < fr.spriteCollection.spriteDefinitions.Length)
-                        {
-                            spr = fr.spriteCollection.spriteDefinitions[fr.spriteId].name;
-                        }
-                        sb.Append("{\"c\":\"").Append(Escape(coll)).Append("\",\"i\":").Append(fr.spriteId)
-                          .Append(",\"n\":\"").Append(Escape(spr)).Append("\"}");
-                    }
-                }
-                sb.Append("]}");
-            }
-            sb.Append("]}");
-
-            string dir = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "HornetExporter");
-            System.IO.Directory.CreateDirectory(dir);
-            string path = System.IO.Path.Combine(dir, "clips.json");
-            System.IO.File.WriteAllText(path, sb.ToString());
-            Plugin.Log.LogInfo("F6: wrote " + path + " (" + clips.Length + " clips)");
-        }
-
-        private static string Escape(string s)
-        {
-            return string.IsNullOrEmpty(s) ? "" : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         private void DumpHornet()

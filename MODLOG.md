@@ -810,3 +810,29 @@ Slashing a CU actor logs `Hit entity <id> for 21` and CU vitals tick `silk 0->1-
 silk (`9->0`) and healed (`hp 8->9`). 
 
 Pause point.
+
+## Housekeeping - remove the obsolete baked-asset pipeline (2026-10-03)
+
+The live capture has fully replaced the old "bake Hornet frames to disk and replay them" approach, so
+all the machinery for it was removed.
+
+- **`silksong/src/HornetCapture.cs`:** dropped `CaptureIsolatedRgba` (dedicated offscreen camera),
+  `CaptureRgba`, `CaptureToFile` (F8), `CaptureBlankToFile` (F1), `Bake` (F5) and their helpers
+  (`EnsureCaptureCamera`, `SetLayerRecursive`, `RenderRead`, `DiffCrop`, `FindClip`, `Safe`). Only the
+  live paths remain: `CaptureBlankRgba` (primary) and `CaptureDiffRgba` (F2 fallback).
+- **`silksong/src/Plugin.cs`:** removed the F1/F5/F6/F8 hotkeys, the `DefaultClips` list, `DumpClips`
+  (wrote `clips.json`) and `Escape`. Remaining hotkeys: F4 apply / F3 restore / F2 capture mode / F7 dump.
+- **`tools/`:** deleted all 14 UnityPy asset-extraction scripts (superseded by the live capture).
+- **`silksong/HornetExporter.csproj`:** removed the dead `SilksongPaths.props` import; deploy now uses
+  the shared `DeployToGame` property like the CU project (was a separate `Deploy` flag).
+- **`Directory.Build.props`:** corrected the stale comments (`DataDir` comment no longer claims an
+  extracted atlas; the top comment now points at `LocalProps.props.example`).
+- **Branches:** deleted `main` (a duplicated parallel lineage) and `master` (pre-passthrough); 
+  `passthrough-live` is now the single canonical branch, carrying `LocalProps.props.example`.
+- **Disk:** removed the stale artifacts from the game plugin folders - Silksong
+  `HornetExporter/baked/` (~420 files), `clips.json`, `hornet_blank.png`, `hornet_capture.png`; CU
+  `HornetInCasualties/hornet/` (~357 files, ~23 MB total).
+
+Both plugins rebuild and deploy clean. Token build verified from a fresh clone: without
+`LocalProps.props` the references do not resolve; copying `LocalProps.props.example` and filling the
+paths makes both projects build.
