@@ -16,6 +16,9 @@ namespace HornetInCasualties
         /// <summary>True while CU's body is driven by Silksong (Body.FixedUpdate is skipped).</summary>
         public static bool Puppeting;
 
+        /// <summary>S5 2D: Silksong reported dead; CU stops pinning and ends the run (brainHealth 0).</summary>
+        public static bool SilkDead;
+
         private PassthroughLink _link;
         private Body _body;
         private int _lastFrameId;
@@ -59,6 +62,7 @@ namespace HornetInCasualties
         private bool _vtValid;
         private int _vtHealth, _vtMax, _vtBlue, _vtSilk, _vtSilkMax, _vtGeo;
         private bool _vtDead;
+        private float _deadStreak;
         private byte[] _hudBuf;
         private int _lastHudFrameId;
 
@@ -69,6 +73,7 @@ namespace HornetInCasualties
                 return; // already initialised (guards against a double display)
             }
             _body = body;
+            SilkDead = false;
             _buf = new byte[Proto.PixelsSize];
             _hudBuf = new byte[Proto.HudPixelsSize];
 
@@ -168,6 +173,17 @@ namespace HornetInCasualties
                                        " silk=" + vsilk + "/" + vsmax + " geo=" + vgeo +
                                        " dead=" + vdead);
                 }
+                // S5 2D: Silksong is the source of truth for life. When it dies, CU ends its run - and
+                // the death is LATCHED: Hornet is expected to respawn in Silksong, and if we un-dead on
+                // that, pinning would restore brainHealth and HandleDeathScreen would cancel the run
+                // ("respawns when Hornet does"). Reset strategy for a fresh run is a later task.
+                bool nowDead = vdead && _link.SilkAlive(1000);
+                _deadStreak = nowDead ? _deadStreak + Time.deltaTime : 0f;
+                if (!SilkDead && _deadStreak > 0.2f)
+                {
+                    SilkDead = true;
+                    Plugin.Log.LogInfo("LiveLink: Silksong dead - ending CU run (latched).");
+                }
             }
 
             // S5 2B: draw Silksong's HUD over CU's world (published on change, half-res). Hide it when
@@ -213,11 +229,18 @@ namespace HornetInCasualties
 
             HideVanillaBody();
 
-            // S5 2C: second, late-frame pass so damage applied after Body.Update does not linger a
-            // whole frame.
+            // S5 2C/2D: late-frame damage pass. Normally pin CU's damage off (2C); if Silksong died,
+            // force brainHealth to 0 instead so the CU run ends (2D).
             if (Puppeting)
             {
-                DamagePinner.Pin(_body);
+                if (SilkDead)
+                {
+                    _body.brainHealth = 0f;
+                }
+                else
+                {
+                    DamagePinner.Pin(_body);
+                }
             }
 
             if (_display != null && _display.enabled)

@@ -101,16 +101,23 @@ namespace HornetInCasualties
         }
     }
 
-    /// <summary>S5 2C: while puppeting, revert CU's damage each frame (Silksong is the authority).</summary>
+    /// <summary>S5 2C/2D: while puppeting, revert CU's damage each frame (Silksong is the authority);
+    /// once Silksong is dead, force brainHealth to 0 to end the CU run instead.</summary>
     [HarmonyPatch(typeof(Body), "Update")]
     internal static class BodyDamagePinPatch
     {
         private static void Postfix(Body __instance)
         {
-            if (LiveLink.Puppeting)
+            if (!LiveLink.Puppeting)
             {
-                DamagePinner.Pin(__instance);
+                return;
             }
+            if (LiveLink.SilkDead)
+            {
+                __instance.brainHealth = 0f;
+                return;
+            }
+            DamagePinner.Pin(__instance);
         }
     }
 

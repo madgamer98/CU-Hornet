@@ -774,3 +774,22 @@ ignores synthetic unicode), so the entity test is manual.
 - **Pogo:** contact damage is skipped while `cState.downAttacking/downSpikeBouncing/downSpikeAntic`, so
   a down-slash bounces (no damage) while a plain landing hurts.
 - CU's own body is still damage-pinned (2C).
+
+## S5 milestone 4 - death sync, Silk -> CU run end (2D) (2026-10-03, VERIFIED)
+
+Protocol unchanged (v11); uses the v10 `dead` flag.
+
+- `src/LiveLink.cs` (CU): reads Silksong's `dead`, and when it persists ~0.2 s **latches** `LiveLink.SilkDead`.
+  Latching is required: Hornet respawns in Silksong (that is its own death animation), and if we un-dead
+  on that, the 2C pin would restore `brainHealth` and `PlayerCamera.HandleDeathScreen` would cancel the
+  run - the first cut "respawned when Hornet did".
+- While `SilkDead`, both the `Body.Update` postfix (`BodyDamagePinPatch`) and the late `LiveLink` pass set
+  `body.brainHealth = 0` instead of pinning, so `Body.alive` stays false and `HandleDeathScreen`
+  (`blackAmount >= 1`, then `EndSequence(0)`) ends the run. `SilkDead` resets only on a fresh `LiveLink`
+  init (new run); a proper reset strategy is still open.
+- No Silksong respawn handling (per scope).
+
+**Verified (human):** let a biter drain Hornet to 0 masks; Silksong logs `hp 1->0/9`, CU logs
+`LiveLink: Silksong dead - ending CU run (latched).`, and CU shows its death screen. Hornet's own
+respawn is visible but the CU run still ends. (Both games restarted; a first F4 landed while CU was
+crouched - `cuH=2.5`, `k=0.832` - and was re-applied standing to `k=0.416`.)
