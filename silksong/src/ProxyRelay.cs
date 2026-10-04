@@ -43,6 +43,12 @@ namespace HornetExporter
             }
             int damage = Mathf.RoundToInt(ReadAttackDamage(other, EntityProxies.HitDamage));
             link.PushEvent(Proto.EventHitEntity, EntityId, damage, 0f, 0f);
+            // S5: hitting a CU actor grants Silk like hitting a real enemy (1 per connecting hit).
+            HeroController hero = HeroController.instance;
+            if (hero != null)
+            {
+                hero.SilkGain();
+            }
             Plugin.Log.LogInfo("Hit entity " + EntityId + " for " + damage);
         }
 

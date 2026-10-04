@@ -28,6 +28,7 @@ namespace HornetInCasualties
         internal static ConfigEntry<KeyboardShortcut> KeySlash;
         internal static ConfigEntry<KeyboardShortcut> KeyDash;
         internal static ConfigEntry<KeyboardShortcut> KeyNeedle;
+        internal static ConfigEntry<KeyboardShortcut> KeyBind;
 
         private Harmony _harmony;
 
@@ -50,6 +51,8 @@ namespace HornetInCasualties
                 "Slash (the action is forwarded to Silksong).");
             KeyDash = Config.Bind("Moves", "KeyDash", new KeyboardShortcut(KeyCode.K), "Dash.");
             KeyNeedle = Config.Bind("Moves", "KeyNeedle", new KeyboardShortcut(KeyCode.L), "Throw the needle.");
+            KeyBind = Config.Bind("Moves", "KeyBind", new KeyboardShortcut(KeyCode.H),
+                "Bind/heal (forwarded to Silksong as its Cast action).");
             DebugKeys = Config.Bind("Dev", "DebugKeys", true,
                 "F1/F2 scale, F3/F4 offsetY, F5/F6 offsetX. F9 tutorial, F10 run.");
 

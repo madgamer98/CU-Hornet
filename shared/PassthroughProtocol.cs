@@ -80,6 +80,7 @@ namespace HornetPassthrough
         public const int BtnDash = 1 << 6;
         public const int BtnNeedle = 1 << 7; // Hornet's ranged/cast action
         public const int BtnEnabled = 1 << 8; // host is actively forwarding input
+        public const int BtnBind = 1 << 9;   // Hornet's Bind (heal) - Silksong's Cast action
 
         // Header fields
         public const int HO_Magic = 0;

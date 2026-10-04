@@ -67,6 +67,8 @@ namespace HornetExporter
                 // Hornet's needle/harpoon throw is the SuperDash action in Silksong (QuickCast is the
                 // tool/spell button and produced an "AirSphere Attack" instead).
                 Commit(ha.SuperDash, b, Proto.BtnNeedle, updateTick, deltaTime);
+                // Bind (heal, costing silk) is Silksong's Cast action.
+                Commit(ha.Cast, b, Proto.BtnBind, updateTick, deltaTime);
 
                 // A fresh double jump requires releasing the button after the ground jump.
                 if (!ha.Jump.IsPressed)

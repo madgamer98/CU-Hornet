@@ -286,8 +286,9 @@ namespace HornetInCasualties
         private float _lastGroundedTime;
 
         /// <summary>
-        /// Read the host's real binds into the wire bitfield. Movement/jump/attack use CU's own
-        /// keybinds (so remaps are respected); dash/needle reuse the passthrough action keys.
+        /// Read the host's real binds into the wire bitfield. Movement/jump use CU's own keybinds (so
+        /// remaps are respected); Slash/Dash/Needle/Bind use the passthrough action keys
+        /// (defaults J/K/L/H).
         /// </summary>
         private int ReadButtons()
         {
@@ -297,9 +298,10 @@ namespace HornetInCasualties
             if (Input.GetKey(KeyBinds.GetBind("up"))) b |= Proto.BtnUp;
             if (Input.GetKey(KeyBinds.GetBind("down"))) b |= Proto.BtnDown;
             if (Input.GetKey(KeyBinds.GetBind("jump"))) b |= Proto.BtnJump;
-            if (Input.GetKey(KeyBinds.GetBind("attack"))) b |= Proto.BtnAttack;
+            if (Input.GetKey(Plugin.KeySlash.Value.MainKey)) b |= Proto.BtnAttack;
             if (Input.GetKey(Plugin.KeyDash.Value.MainKey)) b |= Proto.BtnDash;
             if (Input.GetKey(Plugin.KeyNeedle.Value.MainKey)) b |= Proto.BtnNeedle;
+            if (Input.GetKey(Plugin.KeyBind.Value.MainKey)) b |= Proto.BtnBind;
             return b;
         }
 

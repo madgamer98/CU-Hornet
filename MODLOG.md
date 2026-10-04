@@ -793,3 +793,20 @@ Protocol unchanged (v11); uses the v10 `dead` flag.
 `LiveLink: Silksong dead - ending CU run (latched).`, and CU shows its death screen. Hornet's own
 respawn is visible but the CU run still ends. (Both games restarted; a first F4 landed while CU was
 crouched - `cuH=2.5`, `k=0.832` - and was re-applied standing to `k=0.416`.)
+
+## S5 polish - input remap (slash J, bind H) + silk from CU hits (2026-10-03, VERIFIED)
+
+Protocol **v11** (no layout change; new input bit).
+- **Slash -> J**: `src/LiveLink.cs` `ReadButtons` now sets `BtnAttack` from `Plugin.KeySlash`
+  (default J) instead of CU's own attack bind. `silksong/src/InputInjector.cs` commits `ha.Attack`.
+- **Bind -> H**: new `Proto.BtnBind = 1 << 9`; CU `KeyBind` (default H) sets it; `InputInjector`
+  commits it to Silksong's `ha.Cast` (the Bind/heal action).
+- **Silk per CU hit**: `silksong/src/ProxyRelay.cs` calls `HeroController.SilkGain()` (1 silk) whenever
+  Hornet's attack collider lands on a CU actor proxy, mirroring the native `HitSilkGeneration.Full`
+  path (1 silk per connecting hit).
+
+**Verified (human + log):** J in CU gives `clip=SlashAlt in=0x120`; H gives `clip=BindCharge`.
+Slashing a CU actor logs `Hit entity <id> for 21` and CU vitals tick `silk 0->1->2->3`; a Bind consumed
+silk (`9->0`) and healed (`hp 8->9`). 
+
+Pause point.
