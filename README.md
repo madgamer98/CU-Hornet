@@ -1,6 +1,6 @@
 # CU-Hornet
 
-<img width="400" height="225" alt="cu-hornet-demo" src="https://github.com/user-attachments/assets/1e55d367-2d08-45c0-82d3-0e0320064c71" />
+https://github.com/user-attachments/assets/effad4d7-f03c-4b78-a729-7e1ca80d4c69
 
 Hornet from Silksong running inside Casualties: Unknown as the playable character,
 driven by Silksong itself. Silksong stays the authority on Hornet, and Casualties: Unknown hosts the
