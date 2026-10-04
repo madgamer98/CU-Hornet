@@ -1,19 +1,15 @@
 # CU-Hornet
 
-<!--
-  Demo GIF is hosted on GitHub rather than committed (keeps the repo lean).
+<img width="400" height="225" alt="cu-hornet-demo" src="https://github.com/user-attachments/assets/1e55d367-2d08-45c0-82d3-0e0320064c71" />
 
-  To add it: open this README in GitHub's web editor (pencil icon), drag the clip in (or upload it in
-  an issue comment) to get a https://github.com/user-attachments/assets/... URL, then paste that URL
-  below and uncomment the line.
-
-  ![Hornet playing through Casualties: Unknown](PASTE_USER_ATTACHMENTS_URL_HERE)
--->
-
-Hornet from Hollow Knight: Silksong runs inside Casualties: Unknown as the real playable character,
+Hornet from Silksong running inside Casualties: Unknown as the playable character,
 driven by Silksong itself. Silksong stays the authority on Hornet, and Casualties: Unknown hosts the
 world. Input round-trips between the two: Hornet's body, attack VFX and HUD are streamed into CU, CU's
 terrain and actors are mirrored back into Silksong, and both games keep health and damage in sync.
+
+This is a for-fun experiment with Agentic Coding trying out [rehan-remade/universal-modder](https://github.com/rehan-remade/universal-modder) with no plans for continued development. It plays through a layer well
+  enough, but some visuals are unfinished: the bind and needle-throw effects don't render, and the
+  player and environment scales don't always line up.
 
 ## What works
 
@@ -77,11 +73,7 @@ Add `-p:DeployToGame=false` to build without deploying.
 
 ## Notes
 
-- Single-player and offline only.
 - Both games must keep simulating; the plugins enable run-in-background.
-- This is a for-fun experiment with no plans for continued development. It plays through a layer well
-  enough, but some visuals are unfinished: the bind and needle-throw effects don't render, and the
-  player and environment scales don't always line up.
 - Open items are tracked in [`MODLOG.md`](MODLOG.md).
 
 ## License
