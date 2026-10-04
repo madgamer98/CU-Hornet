@@ -25,7 +25,7 @@ CU's player controller.
   with an installable plugin zip and a field note.
 
 ## Environment (verified 2026-10-02)
--  Working from this repo (`%TOOLKIT_DIR%`).
+- Working from this repo (`%TOOLKIT_DIR%`).
 - **Casualties: Unknown Demo**
   - Path: `%CU_GAME_DIR%`
   - Unity **2022.3.62f3**, **Mono** backend (`CasualtiesUnknown_Data\Managed\Assembly-CSharp.dll`, 879 KB).
@@ -45,10 +45,7 @@ CU's player controller.
     with `AnimCtrl` / `tk2dSpriteAnimator`.
   - Referenced precedent: `jakobhellermann/hkmod-HornetInHallownest` — brings Hornet into HK by requiring a
     Silksong install and reusing its assemblies at runtime (our legal model).
-- **Toolchain present:** the local toolchain.
-  `uv` not on PATH but `bin/um` works from the toolkit repo.
-- Disk: **(machine details omitted)** — keep artifacts small; decomp on %DECOMP_DIR% is fine (small).
-
+- **Toolchain:** the .NET SDK, git and Python are available; `bin/um` works from the toolkit repo.
 ## References
 - SkyCraft design + protocol (studied): `docs/DESIGN.md`, `protocol/skycraft_protocol.h` in
   https://github.com/chasmlol/SkyCraft — shared-memory seqlock + SPSC event rings + shared GPU textures.
@@ -120,7 +117,6 @@ CU's player controller.
 - Menu click map (client px, 1920x1080): content warning → Ctrl; main-menu start = the sitting creature's
   **eyeball** ~ (620, 530); Run settings **Start** ~ (660, 1040). In the course-select screen, right arrow
   ~ (1496, 640), **Start** ~ (960, 874).
-- **Launch note:** if launched by exe, prefer `um win launch`.
 
 ## Hornet asset extraction (Silksong 6000.0.50f1)
 - Silksong content is in **Addressables**: `Hollow Knight Silksong_Data\StreamingAssets\aa\StandaloneWindows64\**\*.bundle`
@@ -765,15 +761,13 @@ Protocol unchanged (v11). Silksong's health is the authority while mirrored.
 pogo bounces without damage. Console text cannot be driven with `um win drive type` (CU's console
 ignores synthetic unicode), so the entity test is manual.
 
-### Contact-damage debug (cost several restarts)
-- **Symptom:** a spawned shadecrawler dealt no contact damage. A custom probe showed the proxy only ever
-  overlapped `ActiveRegion(L29)`, never Hornet's `HeroBox`, and its position was ~5.6 units off.
-- **Bounds:** the proxy centres on the actor's `Rigidbody2D` and sizes from the nearest collider (with a small floor) so it reliably covers the body.
-- **Root cause 2 (enter vs stay):** a proxy (re)activated already overlapping Hornet never fires
-  `OnTriggerEnter2D`; added `OnTriggerStay2D`. `SetContact` is now set before the proxy is activated.
+### Contact-damage fixes
+- The proxy centres on the actor's `Rigidbody2D` and sizes from the collider nearest it (with a small
+  floor), so it reliably covers the actor's body.
+- **Enter vs stay:** a proxy (re)activated already overlapping Hornet never fires `OnTriggerEnter2D`;
+  added `OnTriggerStay2D`, and `SetContact` is set before the proxy is activated.
 - **Pogo:** contact damage is skipped while `cState.downAttacking/downSpikeBouncing/downSpikeAntic`, so
   a down-slash bounces (no damage) while a plain landing hurts.
-- CU's own body is still damage-pinned (2C).
 
 ## S5 milestone 4 - death sync, Silk -> CU run end (2D) (2026-10-03, VERIFIED)
 
@@ -807,7 +801,7 @@ Protocol **v11** (no layout change; new input bit).
 
 **Verified (human + log):** J in CU gives `clip=SlashAlt in=0x120`; H gives `clip=BindCharge`.
 Slashing a CU actor logs `Hit entity <id> for 21` and CU vitals tick `silk 0->1->2->3`; a Bind consumed
-silk (`9->0`) and healed (`hp 8->9`). 
+silk (`9->0`) and healed (`hp 8->9`).
 
 Pause point.
 
@@ -896,5 +890,4 @@ above.
 ### Still open
 - Scale unification (S4 goal 4).
 - Reset strategy for a fresh run after death (S5 2D).
-
 - Verbose diagnostics remain in the logs (`LiveLink terrain`, `camY/limbAvgY`, `TM diag`, `HURT!/HEALTH!`).

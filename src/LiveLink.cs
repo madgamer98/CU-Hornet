@@ -658,10 +658,9 @@ namespace HornetInCasualties
                 {
                     continue;
                 }
-                // Center the proxy on the actor's rigidbody (its body), not on a union of collider
-                // bounds: when a biter's legs splay/stretch, a leg collider can sit far from the body
-                // and drag the union off-centre (observed: proxy at y=10.6 while Hornet was at y=5).
-                // Size it from the root collider nearest the body, with a floor so contact is reliable.
+                // Center the proxy on the actor's rigidbody (its body) rather than a union of collider
+                // bounds, and size it from the root collider nearest the body, so the proxy reliably
+                // covers the actor's body.
                 Rigidbody2D arb = be.GetComponent<Rigidbody2D>();
                 Vector2 center = arb != null ? arb.position : (Vector2)be.transform.position;
                 _entCols.Clear();
@@ -682,9 +681,7 @@ namespace HornetInCasualties
                         size = cc.bounds.size;
                     }
                 }
-                // Floor the proxy size: a biter squashed under the kinematic puppet reports a small,
-                // low body, so its proxy top fell just below Hornet's hurtbox and a plain landing did
-                // not register (only side contacts did). A ~2 CU floor makes contact reliable.
+                // Floor the proxy size so a small-bodied actor still makes contact reliably.
                 size.x = Mathf.Max(size.x, 2.0f);
                 size.y = Mathf.Max(size.y, 2.0f);
                 int flags = Proto.EntFlagAlive;
