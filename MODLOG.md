@@ -837,3 +837,64 @@ all the machinery for it was removed.
 Both plugins rebuild and deploy clean. Token build verified from a fresh clone: without
 `LocalProps.props` the references do not resolve; copying `LocalProps.props.example` and filling the
 paths makes both projects build.
+
+## S4 / S5 scopes retired (2026-10-03)
+
+`S4-SCOPE.md` and `S5-SCOPE.md` were planning docs; with both milestones complete their durable content
+is folded in here, the same way the S1-S3 scopes were retired. The full play-by-play is in the sections
+above.
+
+### S4 goals (status)
+1. Pogo off CU enemies - done (entity stream + layer-19/17 proxies).
+2. Damage both ways - done (Hornet -> CU actors via the Events ring; CU biters -> Hornet via
+   `ContactDamage` + explicit `TakeDamage`).
+3. Clean visual passthrough - done (blank-slate capture with a narrowed main-camera mask, no environment).
+4. Correct scale - **still open** (CU still uses manual `AvatarScale`/`Ppu`; the deterministic
+   PPU-from-`k` scheme was attempted and reverted).
+
+### S5 goals (status)
+- Slash-arc VFX passthrough - done (layer 17 kept in the mask; `HideEffects` leaves it visible).
+- Vitals channel - done (proto v10).
+- Silksong HUD overlay - done (proto v11; half-res, published every 3rd frame).
+- CU damage pinned off + proxy-only damage gate - done (2C + 2E).
+- Death sync - done (2D; latched `SilkDead` -> `brainHealth = 0`).
+- Requested polish - done: slash on `J`, bind on `H`, `SilkGain()` per CU hit.
+
+### Durable decomp references
+- Silksong pogo: `HeroDownAttack.ContinueBounceTrigger` -> `HeroController.DownspikeBounce`; layers
+  17/19 bounce directly (no heavyweight `HealthManager`).
+- Silksong damage intake: `HeroController.TakeDamage`, `DoSpecialDamage`, `TakeChompDamage`,
+  `TakeFrostDamage`, `DieFromHazard`, `HazardRespawn`; death via `cState.dead` / `health == 0`.
+- Silksong vitals: `PlayerData.health/maxHealth/healthBlue/silk/silkMax/geo`; HUD via
+  `GameCameras.hudCamera` (cullingMask 32; the UI canvas is `ScreenSpaceCamera`).
+- CU: `Body.alive` is `brainHealth > 0`; `PlayerCamera.HandleDeathScreen` ends the run; the camera
+  follows the average ragdoll limb position.
+- Layers (`GlobalEnums/PhysLayers`): PLAYER=9, TERRAIN=8, HERO_ATTACK=17, INTERACTIVE_OBJECT=19,
+  HERO_BOX=20.
+
+### Run / build recipe (at retirement)
+- Build CU: `dotnet build -c Release` in `%PROJECT_DIR%` (deploys to
+  `%CU_GAME_DIR%\BepInEx\plugins\HornetInCasualties`).
+- Build Silksong: `dotnet build -c Release` in `%PROJECT_DIR%\silksong` (deploys to
+  `%SILKSONG_DIR%\BepInEx\plugins\HornetExporter`).
+- Every code change needs **both games restarted** (BepInEx loads DLLs at startup).
+- Launch: `um win launch --steam 4576510` (CU) / `--steam 1030300` (Silksong).
+- CU: content warning -> Ctrl; F9 tutorial -> F8 sandbox (or F10 real run).
+- Silksong: START GAME -> profile 1; **F4** applies the mirror, **F3** restores, **F7** dumps Hornet.
+- In CU: `J` slash, `K` dash, `L` needle, `H` bind.
+- Verify with `um win shot` / `um win record` + `um video contact`; humans are needed for jump/contact
+  timing.
+
+### Lessons that must not be relearned
+1. Manual scale stays until scale unification is done on purpose; a past attempt was reverted.
+2. Keep the capture crop **fixed-size**; tight-to-alpha crops made CU reallocate its texture and hitch.
+3. A seqlock is wrong for a big payload - the Hornet frame and HUD pixels are **double-buffered**.
+4. CU's camera follows the average ragdoll limb, so the puppet pins limbs together with the root.
+5. `Body.Flip()` flips the root transform scale; divide it out so the display is not double-mirrored.
+6. Do not apply F4 while CU's player is crouched (`k` comes from the CU collider height).
+
+### Still open
+- Scale unification (S4 goal 4).
+- Reset strategy for a fresh run after death (S5 2D).
+
+- Verbose diagnostics remain in the logs (`LiveLink terrain`, `camY/limbAvgY`, `TM diag`, `HURT!/HEALTH!`).

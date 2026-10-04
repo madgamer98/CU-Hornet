@@ -42,8 +42,7 @@ The wire format is `shared/PassthroughProtocol.cs`, compiled into both plugins (
 Header, CuState, FrameMeta (double-buffered pixels), Input, Terrain, PlayerState, Entities, Events,
 Vitals, Hud.
 
-The running history and design notes live in [`MODLOG.md`](MODLOG.md); feature scopes are in
-[`S4-SCOPE.md`](S4-SCOPE.md) and [`S5-SCOPE.md`](S5-SCOPE.md).
+The running history and design notes live in [`MODLOG.md`](MODLOG.md).
 
 ## Build
 
@@ -75,7 +74,6 @@ Add `-p:DeployToGame=false` to build without deploying.
 | `src/` | The Casualties: Unknown (host) plugin. |
 | `silksong/` | The Silksong (guest) plugin. |
 | `MODLOG.md` | Running journal / field notes. |
-| `S4-SCOPE.md`, `S5-SCOPE.md` | Feature scopes. |
 
 ## Notes
 
