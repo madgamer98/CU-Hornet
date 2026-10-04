@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    Example machine-specific overrides. COPY this file to `LocalProps.props` (same folder) and replace
+    the %TOKENS% below with your real install paths. `LocalProps.props` is gitignored, so your paths
+    never enter the repo; `Directory.Build.props` imports it automatically when present.
+
+    Tokens used in tracked files:
+      %CU_GAME_DIR%   - your "Casualties: Unknown" install folder
+      %SILKSONG_DIR%  - your "Hollow Knight: Silksong" install folder
+
+    Set both (or only the one you build). The tracked defaults in Directory.Build.props are just these
+    tokens and cannot resolve on their own.
+  -->
+  <PropertyGroup>
+    <CuGameDir>%CU_GAME_DIR%</CuGameDir>
+    <SilksongDir>%SILKSONG_DIR%</SilksongDir>
+  </PropertyGroup>
+</Project>
