@@ -11,7 +11,7 @@ namespace HornetExporter
     /// Silksong side of the passthrough. Streams Hornet's captured frame, HUD, vitals and input to
     /// Casualties: Unknown over shared memory (<see cref="LiveLink"/>) and mirrors CU's terrain/actors
     /// (<see cref="TerrainMirror"/>, <see cref="EntityProxies"/>).
-    /// Hotkeys: F4 apply mirror, F3 restore, F2 toggle blank/diff capture, F7 dump Hornet info.
+    /// Hotkeys: F4 apply mirror, F3 restore, F7 dump Hornet info.
     /// </summary>
     [BepInPlugin(Guid, "Hornet Exporter", Version)]
     public class Plugin : BaseUnityPlugin
@@ -60,7 +60,7 @@ namespace HornetExporter
         }
     }
 
-    /// <summary>F4 = apply the mirror; F3 = restore; F2 = toggle capture mode; F7 = dump Hornet info.</summary>
+    /// <summary>F4 = apply the mirror; F3 = restore; F7 = dump Hornet info.</summary>
     internal class Hotkeys : MonoBehaviour
     {
         private void Update()
@@ -68,12 +68,6 @@ namespace HornetExporter
             if (Input.GetKeyDown(KeyCode.F7))
             {
                 DumpHornet();
-            }
-
-            if (Input.GetKeyDown(KeyCode.F2))
-            {
-                LiveLink.UseBlankCapture = !LiveLink.UseBlankCapture;
-                Plugin.Log.LogInfo("Capture mode: " + (LiveLink.UseBlankCapture ? "blank" : "diff"));
             }
 
             if (Input.GetKeyDown(KeyCode.F4))

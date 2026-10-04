@@ -818,10 +818,11 @@ all the machinery for it was removed.
 
 - **`silksong/src/HornetCapture.cs`:** dropped `CaptureIsolatedRgba` (dedicated offscreen camera),
   `CaptureRgba`, `CaptureToFile` (F8), `CaptureBlankToFile` (F1), `Bake` (F5) and their helpers
-  (`EnsureCaptureCamera`, `SetLayerRecursive`, `RenderRead`, `DiffCrop`, `FindClip`, `Safe`). Only the
-  live paths remain: `CaptureBlankRgba` (primary) and `CaptureDiffRgba` (F2 fallback).
-- **`silksong/src/Plugin.cs`:** removed the F1/F5/F6/F8 hotkeys, the `DefaultClips` list, `DumpClips`
-  (wrote `clips.json`) and `Escape`. Remaining hotkeys: F4 apply / F3 restore / F2 capture mode / F7 dump.
+  (`EnsureCaptureCamera`, `SetLayerRecursive`, `RenderRead`, `DiffCrop`, `FindClip`, `Safe`). The legacy
+  main-camera **diff fallback** (`CaptureDiffRgba` + its `RenderInto`/`ComputeRect`/`SetBodyEnabled`
+  helpers, toggled with F2) was removed too, so `CaptureBlankRgba` is the only capture path.
+- **`silksong/src/Plugin.cs`:** removed the F1/F2/F5/F6/F8 hotkeys, the `DefaultClips` list, `DumpClips`
+  (wrote `clips.json`) and `Escape`. Remaining hotkeys: F4 apply / F3 restore / F7 dump.
 - **`tools/`:** deleted all 14 UnityPy asset-extraction scripts (superseded by the live capture).
 - **`silksong/HornetExporter.csproj`:** removed the dead `SilksongPaths.props` import; deploy now uses
   the shared `DeployToGame` property like the CU project (was a separate `Deploy` flag).
