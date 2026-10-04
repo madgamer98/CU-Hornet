@@ -77,6 +77,13 @@ Add `-p:DeployToGame=false` to build without deploying.
 
 ## Notes
 
-- Single-player and offline only. Nothing touches anti-cheat.
+- Single-player and offline only.
 - Both games must keep simulating; the plugins enable run-in-background.
+- This is a for-fun experiment with no plans for continued development. It plays through a layer well
+  enough, but some visuals are unfinished: the bind and needle-throw effects don't render, and the
+  player and environment scales don't always line up.
 - Open items are tracked in [`MODLOG.md`](MODLOG.md).
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
